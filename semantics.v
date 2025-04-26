@@ -17,12 +17,12 @@ Local Open Scope sets.
 
 Inductive cell :=
 | CEmp: cell
-| CZ: I → Z → cell (* fractional permission *)
+| CZ: Z → cell
 | CUndef: cell
 | CFun: string → cell.
 
 Definition writable (v: cell): Prop :=
-  match v with CZ q _ => q = I1 | CUndef => True | _ => False end.
+  match v with CZ _ => True | CUndef => True | _ => False end.
 
 Definition heap := Z → cell.
 
@@ -131,16 +131,16 @@ Definition eval_arith_er (op: arith_op) (r₁ r₂: reg): ins_sem_er :=
   λ _, r₂ = PC.
 
 Definition eval_load_ok r₁ r₂ :=
-  λ σ σ', ∃ q n, hp σ (rg σ r₁) = CZ q n ∧ set_reg r₂ n σ σ' ∧ inc_pc 3 σ σ'.
+  λ σ σ', ∃ n, hp σ (rg σ r₁) = CZ n ∧ set_reg r₂ n σ σ' ∧ inc_pc 3 σ σ'.
 Definition eval_load_er r₁ r₂: ins_sem_er :=
-  λ σ, r₂ = PC ∨ ¬ ∃ q n, hp σ (rg σ r₁) = CZ q n.
+  λ σ, r₂ = PC ∨ ¬ ∃ n, hp σ (rg σ r₁) = CZ n.
 
 Definition only_inc_pc (n: Z): LΣ → LΣ → Prop :=
   λ σ σ', rg σ' PC = rg σ PC + n ∧ ∀ r, r ≠ PC → rg σ r = rg σ' r.
 
 Definition eval_store_ok r₁ r₂: ins_sem_ok :=
   λ σ σ', writable (hp σ (rg σ r₂)) ∧ only_inc_pc 3 σ σ' ∧ st σ = st σ'
-        ∧ hp σ' (rg σ r₂) = CZ I1 (rg σ r₁) ∧ equal_but (rg σ r₂) (hp σ) (hp σ').
+        ∧ hp σ' (rg σ r₂) = CZ (rg σ r₁) ∧ equal_but (rg σ r₂) (hp σ) (hp σ').
 Definition eval_store_er (r₁ r₂: reg): ins_sem_er :=
   λ σ, ¬ writable (hp σ (rg σ r₂)).
 
@@ -191,17 +191,17 @@ Section eval_ins.
   Definition cur_ins: LΣ → ins :=
     λ σ,
       match hp σ (rg σ PC) with
-      | CZ _ n =>
+      | CZ n =>
           match decode n with
           | inl (inl i) => i
           | inl (inr f) =>
               match hp σ (rg σ PC + 1) with
-              | CZ _ n => f n
+              | CZ n => f n
               | _ => IErr
               end
           | inr f =>
               match hp σ (rg σ PC + 1), hp σ (rg σ PC + 2) with
-              | CZ _ n, CZ _ m => f n m
+              | CZ n, CZ m => f n m
               | _, _ => IErr
               end
           end
@@ -293,12 +293,12 @@ Section eval_call.
 End eval_call.
 
 Definition eval_store (e₁ e₂: Z): expr_sem :=
-  (λ σ _ σ', writable (σ e₁) ∧ σ' e₁ = CZ I1 e₂ ∧ equal_but e₁ σ σ',
+  (λ σ _ σ', writable (σ e₁) ∧ σ' e₁ = CZ e₂ ∧ equal_but e₁ σ σ',
    λ σ, ¬ writable (σ e₁)).
 
 Definition eval_load (e: Z): expr_sem :=
-  (λ σ n σ', ∃ q, σ e = CZ q n ∧ σ = σ',
-   λ σ, ¬ ∃ q n, σ e = CZ q n).
+  (λ σ n σ', σ e = CZ n ∧ σ = σ',
+   λ σ, ¬ ∃ n, σ e = CZ n).
 
 Definition eval_comp_op (op: compare_op): Z → Z → Prop :=
   match op with OEq => eq | OLe => Z.le | OLt => Z.lt end.

@@ -23,7 +23,7 @@ Class MultiUnitSepAlg (Σ: Type): Type :=
     MSA_positive: ∀ {a b c}, join a b c → join c c c → join a a a;
   }.
 
-#[export] Instance discrete_MSA A: MultiUnitSepAlg A.
+#[export] Instance discrete_MSA {A}: MultiUnitSepAlg A.
 Proof.
   refine {| join := λ x y z, x = z ∧ y = z; MSA_fun := _; MSA_cancel := _; MSA_comm := _; MSA_assoc := _; MSA_unit := _ |}.
   - intuition.
@@ -167,16 +167,16 @@ Proof.
   tauto.
 Qed.
 
-Inductive compatible_opt A: option A → option A → option A → Prop :=
-| CompOptNone: compatible_opt A None None None
-| CompOpt1 a: compatible_opt A (Some a) None (Some a)
-| CompOpt2 a: compatible_opt A None (Some a) (Some a).
+Inductive join_opt A: option A → option A → option A → Prop :=
+| JOptNone: join_opt A None None None
+| JOpt1 a: join_opt A (Some a) None (Some a)
+| JOpt2 a: join_opt A None (Some a) (Some a).
 
-Hint Constructors compatible_opt.
+Hint Constructors join_opt.
 
-#[export] Instance option_MSA A: MultiUnitSepAlg (option A).
+#[export] Instance option_MSA {A}: MultiUnitSepAlg (option A).
 Proof.
-  refine {| join := compatible_opt A; MSA_fun := _; MSA_cancel := _; MSA_comm := _; MSA_assoc := _; MSA_unit := _ |}.
+  refine {| join := join_opt A; MSA_fun := _; MSA_cancel := _; MSA_comm := _; MSA_assoc := _; MSA_unit := _ |}.
   - intros. invert H; invert H0; reflexivity.
   - intros. invert H; invert H0; reflexivity.
   - intros. invert H; constructor.
@@ -200,8 +200,8 @@ Proof.
     + reflexivity.
 Qed.
 
-Lemma compatible_opt_some: ∀ {A v1 v2 v3 x},
-    compatible_opt A v1 v2 v3 →
+Lemma join_opt_some: ∀ {A v1 v2 v3 x},
+    join_opt A v1 v2 v3 →
     v1 = Some x →
     v2 = None ∧ v3 = Some x.
 Proof.
@@ -210,20 +210,26 @@ Proof.
   discriminate.
 Qed.
 
-Inductive compatible_cell: cell → cell → cell → Prop :=
-| CompCellEmp: compatible_cell CEmp CEmp CEmp
-| CompCellZ1 (q: I) (v: Z): compatible_cell (CZ q v) CEmp (CZ q v)
-| CompCellZ2 (q: I) (v: Z): compatible_cell CEmp (CZ q v) (CZ q v)
-| CompCellFrct (p q r: I) (v: Z): Iadd p q r → compatible_cell (CZ p v) (CZ q v) (CZ r v)
-| CompCellUndef1: compatible_cell CUndef CEmp CUndef
-| CompCellUndef2: compatible_cell CEmp CUndef CUndef
-| CompCellFun (f: string): compatible_cell (CFun f) (CFun f) (CFun f).
+Inductive cell_frag: Type :=
+| CFEmp: cell_frag
+| CFZ: I → Z → cell_frag (* fractional permission *)
+| CFUndef: cell_frag
+| CFFun: string → cell_frag.
 
-Hint Constructors compatible_cell.
+Inductive join_frag: cell_frag → cell_frag → cell_frag → Prop :=
+| JFragEmp: join_frag CFEmp CFEmp CFEmp
+| JFragZ1 (q: I) (v: Z): join_frag (CFZ q v) CFEmp (CFZ q v)
+| JFragZ2 (q: I) (v: Z): join_frag CFEmp (CFZ q v) (CFZ q v)
+| JFragFrct (p q r: I) (v: Z): Iadd p q r → join_frag (CFZ p v) (CFZ q v) (CFZ r v)
+| JFragUndef1: join_frag CFUndef CFEmp CFUndef
+| JFragUndef2: join_frag CFEmp CFUndef CFUndef
+| JFragFun (f: string): join_frag (CFFun f) (CFFun f) (CFFun f).
 
-#[export] Instance cell_MSA: MultiUnitSepAlg cell.
+Hint Constructors join_frag.
+
+#[export] Instance cell_frag_MSA: MultiUnitSepAlg cell_frag.
 Proof.
-  refine {| join := compatible_cell; MSA_fun := _; MSA_cancel := _; MSA_comm := _; MSA_assoc := _; MSA_unit := _ |}.
+  refine {| join := join_frag; MSA_fun := _; MSA_cancel := _; MSA_comm := _; MSA_assoc := _; MSA_unit := _ |}.
   - intros. invert H; invert H0; try reflexivity.
     invI p; invI q; invI r; invI r0.
     apply IaddE in H1.
@@ -254,7 +260,7 @@ Proof.
   - intros. invert H; auto.
     invI p; invI q; invI r.
     apply IaddE in H0.
-    apply CompCellFrct.
+    apply JFragFrct.
     apply IaddE.
     psatz Q.
   - intros.
@@ -262,15 +268,15 @@ Proof.
     + exists z.
       invert H; invert H0; auto.
     + destruct z.
-      * exists (CZ i z0).
+      * exists (CFZ i z0).
         invert H; invert H0; auto.
       * destruct x; destruct a; destruct b; try (exfalso; invert H; invert H0; tauto).
-        exists (CZ i2 z2).
+        exists (CFZ i2 z2).
         invert H.
         auto.
         pose (Iadd_opt i i0).
         destruct o eqn: eq.
-        exists (CZ i4 z).
+        exists (CFZ i4 z).
         invert H; invert H0; auto.
         invI i1; invI i; invI i0; invI i2; invI i3; invI i4.
         apply IaddE in H1; apply IaddE in H2.
@@ -286,7 +292,7 @@ Proof.
         subst i.
         apply liftI_inj in eq.
         unfold I_eq in eq; simpl in eq.
-        split; apply CompCellFrct; apply IaddE; psatz Q.
+        split; apply JFragFrct; apply IaddE; psatz Q.
         exfalso.
         invI i1; invI i; invI i0; invI i2; invI i3.
         pose proof (Iadd_optE x0 x1).
@@ -304,9 +310,9 @@ Proof.
         invert H; invert H0; auto.
       * exfalso.
         invert H; invert H0; auto.
-    + exists CUndef.
+    + exists CFUndef.
       invert H; invert H0; auto.
-    + exists (CFun s).
+    + exists (CFFun s).
       invert H; invert H0; auto.
   - intros. destruct x; eauto.
   - intros. invert H; invert H0; auto.
@@ -317,16 +323,19 @@ Proof.
     psatz Q.
 Defined.
 
-Lemma emp_empty: ∀ {v}, v = CEmp → MSA_empty v.
+Lemma emp_empty: ∀ {v}, v = CFEmp → MSA_empty v.
 Proof. intros. simpl. subst v. auto. Qed.
 
-Lemma fun_empty: ∀ {v f}, v = CFun f → MSA_empty v.
+Lemma fun_empty: ∀ {v f}, v = CFFun f → MSA_empty v.
 Proof. intros. simpl. subst v. auto. Qed.
 
-Lemma compatible_writable: ∀ {v1 v2 v3},
-    compatible_cell v1 v2 v3 →
-    writable v1 →
-    v2 = CEmp ∧ v1 = v3.
+Definition frag_writable (v: cell_frag): Prop :=
+  match v with CFUndef => True | CFZ q _ => q = I1 | _ => False end.
+
+Lemma join_writable: ∀ {v1 v2 v3},
+    join_frag v1 v2 v3 →
+    frag_writable v1 →
+    v2 = CFEmp ∧ v1 = v3.
 Proof.
   intros ? ? ? C W.
   invert C; simpl in W; try tauto.
@@ -336,20 +345,20 @@ Proof.
   exfalso; psatz Q.
 Qed.
 
-Lemma compatible_int: ∀ {v1 v2 v3 q n},
-    compatible_cell v1 v2 v3 →
-    v1 = CZ q n →
-    ∃ q', v3 = CZ q' n.
+Lemma join_int: ∀ {v1 v2 v3 q n},
+    join_frag v1 v2 v3 →
+    v1 = CFZ q n →
+    ∃ q', v3 = CFZ q' n.
 Proof.
   intros ? ? ? ? ? W ?.
   subst v1.
   invert W; eauto.
 Qed.
 
-Lemma compatible_fun: ∀ {x y z f},
-    compatible_cell x y z →
-    x = CFun f →
-    y = CFun f ∧ z = CFun f.
+Lemma join_fun: ∀ {x y z f},
+    join_frag x y z →
+    x = CFFun f →
+    y = CFFun f ∧ z = CFFun f.
 Proof.
   intros.
   subst x.

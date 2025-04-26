@@ -17,13 +17,75 @@ Local Open Scope list.
 
 Set Default Proof Using "Type".
 
-Definition Stack := Z → option Z.
-Definition Regs := reg → option Z.
+(* Heap Fragments (rather than authoritative/physical heap). *)
 
-Definition ΣA_base: Type := Regs * Stack * heap.
+Definition fic_heap := Z → cell_frag.
+#[export] Instance fic_heap_MSA: MultiUnitSepAlg fic_heap := index_prod_MSA cell_frag_MSA.
 
-Definition lift_LΣ (σ: LΣ): ΣA_base :=
-  (λ r, Some (rg σ r), λ l, Some (st σ l), hp σ).
+Definition fic_stack := Z → option Z.
+#[export] Instance fic_stack_MSA: MultiUnitSepAlg fic_stack := index_prod_MSA option_MSA.
+
+Definition fic_reg := reg → option Z.
+#[export] Instance fic_reg_MSA: MultiUnitSepAlg fic_reg := index_prod_MSA option_MSA.
+
+Definition fic_LΣ: Type := fic_reg * fic_stack * fic_heap.
+#[export] Instance fic_LΣ_MSA: MultiUnitSepAlg fic_LΣ := prod_MSA (prod_MSA fic_reg_MSA fic_stack_MSA) fic_heap_MSA.
+
+Definition lift_heap (σ: heap): fic_heap :=
+  λ a, match σ a with
+       | CEmp => CFEmp
+       | CZ n => CFZ I1 n
+       | CUndef => CFUndef
+       | CFun f => CFFun f
+       end.
+
+Definition lift_LΣ (σ: LΣ): fic_LΣ :=
+  (λ r, Some (rg σ r), λ l, Some (st σ l), lift_heap (hp σ)).
+
+Lemma lift_heap_eq: ∀ {σ σ' a},
+    σ a = σ' a ↔ (lift_heap σ) a = (lift_heap σ') a.
+Proof.
+  intros.
+  unfold lift_heap.
+  split; intros;
+    destruct (σ a); destruct (σ' a);
+    try discriminate; try reflexivity;
+    injection H as H;
+    rewrite H; reflexivity.
+Qed.
+
+Lemma lift_heap_fun: ∀ {σ a f},
+    σ a = CFun f ↔ (lift_heap σ) a = CFFun f.
+Proof.
+  intros.
+  unfold lift_heap.
+  split; intros;
+    destruct (σ a); try discriminate; try reflexivity;
+    injection H as H;
+    rewrite H; reflexivity.
+Qed.
+
+Lemma lift_heap_int: ∀ {σ a q n},
+    σ a = CZ n ∧ q = I1 ↔ (lift_heap σ) a = CFZ q n.
+Proof.
+  intros.
+  unfold lift_heap.
+  split; [intros [H ?]|intros H];
+    destruct (σ a); try discriminate; try reflexivity;
+    injection H as H;
+    subst; tauto.
+Qed.
+
+Lemma lift_heap_writable: ∀ {σ a},
+    writable (σ a) ↔ frag_writable ((lift_heap σ) a).
+Proof.
+  intros.
+  unfold lift_heap.
+  split; intros;
+    destruct (σ a); simpl in H; try discriminate; try reflexivity; try tauto.
+Qed.
+
+(* Heap Fragments End. *)
 
 Inductive Assn: Type → Type :=
 | ALift Σ (P: assn Σ): Assn Σ
@@ -37,9 +99,9 @@ Inductive Assn: Type → Type :=
 | AEx Σ (A: Type) (Px: A → Assn Σ): Assn Σ
 | AAll Σ (A: Type) (Px: A → Assn Σ): Assn Σ
 with fun_spec :=
-  FunSpec (Pa: list Z → Assn heap) (Qa: list Z → Z → Assn heap)
+  FunSpec (Pa: list Z → Assn fic_heap) (Qa: list Z → Z → Assn fic_heap)
 with mach_spec :=
-  MachSpec (Pa: Assn ΣA_base) (Qa: Assn ΣA_base).
+  MachSpec (Pa: Assn fic_LΣ) (Qa: Assn fic_LΣ).
 
 Arguments ALift {Σ}.
 Arguments AFunSpec {Σ}.
@@ -56,15 +118,11 @@ Definition prog_spec: Type := (string → fun_spec → Prop) * (mach_spec → Pr
 
 Definition lift_Σ Σ: Type := prog_spec * Σ.
 
-Definition ΣC: Type := lift_Σ heap.
-Definition ΣA: Type := lift_Σ ΣA_base.
+Definition ΣC: Type := lift_Σ fic_heap.
+Definition ΣA: Type := lift_Σ fic_LΣ.
 
-#[export] Instance heap_MSA: MultiUnitSepAlg heap := index_prod_MSA cell_MSA.
-#[export] Instance ΣC_MSA: MultiUnitSepAlg ΣC := prod_MSA (discrete_MSA _) heap_MSA.
-#[export] Instance Regs_MSA: MultiUnitSepAlg Regs := index_prod_MSA (option_MSA _).
-#[export] Instance Stack_MSA: MultiUnitSepAlg Stack := index_prod_MSA (option_MSA _).
-#[export] Instance ΣA_base_MSA: MultiUnitSepAlg ΣA_base := prod_MSA (prod_MSA Regs_MSA Stack_MSA) heap_MSA.
-#[export] Instance ΣA_MSA: MultiUnitSepAlg ΣA := prod_MSA (discrete_MSA _) ΣA_base_MSA.
+#[export] Instance ΣC_MSA: MultiUnitSepAlg ΣC := prod_MSA discrete_MSA fic_heap_MSA.
+#[export] Instance ΣA_MSA: MultiUnitSepAlg ΣA := prod_MSA discrete_MSA fic_LΣ_MSA.
 
 Notation "'spec'" := fst (only parsing).
 Notation "'low'" := snd (only parsing).
@@ -99,11 +157,11 @@ Defined.
 Definition hoare_prog_fun (Δ: prog_spec) (χ_ok: sem_ok) (χ_er: sem_er) :=
   ∀ f Φ Ψ vs h g σ,
     (f, FunSpec Φ Ψ) ∈ fst Δ
-  → (eval_assn (Φ vs) (Δ, h)) → join h g σ
+  → (eval_assn (Φ vs) (Δ, h)) → join h g (lift_heap σ)
   → ¬ (inl (f, vs, σ)) ∈ χ_er
   ∧ ∀ n σ',
       (inl (f, vs, σ), inl (n, σ')) ∈ χ_ok
-    → ∃ h', (eval_assn (Ψ vs n) (Δ, h')) ∧ join h' g σ'.
+    → ∃ h', (eval_assn (Ψ vs n) (Δ, h')) ∧ join h' g (lift_heap σ').
 
 Definition hoare_prog_mach (Δ: prog_spec) (χ_ok: sem_ok) (χ_er: sem_er) :=
   ∀ Φ Ψ h g σ,
@@ -118,16 +176,16 @@ Definition hoare_prog (Δ: prog_spec) (χ_ok: sem_ok) (χ_er: sem_er) :=
 
 Section hoare_expr.
 
-  Definition empty_but (l: Z): assn heap := λ σ, ∀ l', l ≠ l' → MSA_empty (σ l').
+  Definition empty_but (l: Z): assn fic_heap := λ σ, ∀ l', l ≠ l' → MSA_empty (σ l').
 
-  Definition astore_int_q l q v: assn heap :=
-    λ σ, σ l = CZ q v ∧ empty_but l σ.
+  Definition astore_int_q l q v: assn fic_heap :=
+    λ σ, σ l = CFZ q v ∧ empty_but l σ.
 
-  Definition astore_uninit (l: Z): assn heap :=
-    λ σ, writable (σ l) ∧ empty_but l σ.
+  Definition astore_uninit (l: Z): assn fic_heap :=
+    λ σ, frag_writable (σ l) ∧ empty_but l σ.
 
   Definition astore_fun (l: Z) (H: fun_spec): assn ΣC :=
-    λ σ, ∃ f, low σ l = CFun f ∧ (f, H) ∈ fst (spec σ) ∧ MSA_empty σ.
+    λ σ, ∃ f, low σ l = CFFun f ∧ (f, H) ∈ fst (spec σ) ∧ MSA_empty σ.
 
   Variable χ_ok: sem_ok.
   Variable χ_er: sem_er.
@@ -139,11 +197,11 @@ Section hoare_expr.
   Definition hoare (P: assn ΣC) (e: expr Z expr_sem) (Q: Z → assn ΣC) :=
     ∀ Δ' h g σ,
       spec_include Δ Δ' → hoare_prog Δ' χ_ok χ_er
-    → P (Δ', h) → join h g σ
+    → P (Δ', h) → join h g (lift_heap σ)
     → (¬ σ ∈ er (eval_expr' χ_ok χ_er e))
     ∧ ∀ n σ',
         (σ, n, σ') ∈ ok (eval_expr' χ_ok χ_er e)
-      → ∃ h', Q n (Δ', h') ∧ join h' g σ'.
+      → ∃ h', Q n (Δ', h') ∧ join h' g (lift_heap σ').
 
   Theorem hoare_bind: ∀ {P Q R e₁ e₂},
       hoare P e₁ Q
@@ -178,10 +236,10 @@ Section hoare_expr.
   Definition hoare_ok (P: assn ΣC) (e: expr Z expr_sem) (Q: Z → assn ΣC) :=
     ∀ Δ' h g σ,
       spec_include Δ Δ' → hoare_prog Δ' χ_ok χ_er
-    → P (Δ', h) → join h g σ
+    → P (Δ', h) → join h g (lift_heap σ)
     → ∀ n σ',
         (σ, n, σ') ∈ ok (eval_expr' χ_ok χ_er e)
-      → ∃ h', Q n (Δ', h') ∧ join h' g σ'.
+      → ∃ h', Q n (Δ', h') ∧ join h' g (lift_heap σ').
 
   Theorem hoare_fix_ok: ∀ {I Q e},
       (∀ x, hoare I (EFixVar x) Q → hoare I (e x) Q)
@@ -429,6 +487,7 @@ Section hoare_expr.
       + unfold lift_assn, astore_fun.
         exists f.
         pose proof MSA_prod_empty HP.
+        apply lift_heap_fun in H1.
         pose proof (MSA_positive' (HJ n) (fun_empty H1)).
         simpl.
         rewrite (proj1 H2).
@@ -458,29 +517,33 @@ Section hoare_expr.
     unfold hoare_prog in HΔ.
     unfold hoare_prog_fun in HΔ.
     specialize (proj1 HΔ _ _ _ _ _ _ _ HH HP HJ) as HΔ0.
-    pose proof compatible_fun (proj2 HJ' l) Hl as [H3 _].
-    pose proof compatible_fun (HJ l) H3 as H4.
+    pose proof join_fun (proj2 HJ' l) Hl as [H3 _].
+    pose proof join_fun (HJ l) H3 as H4.
     split.
     - simpl.
       intros [H|H].
       + destruct H as (f'&Hl'&He).
+        apply lift_heap_fun in Hl'.
         rewrite (proj2 H4) in Hl'.
         injection Hl' as Hl'; subst f'.
         apply HΔ0.
         exact He.
       + apply H.
         exists f.
+        apply lift_heap_fun.
         easy.
     - intros ?? Hn.
       apply HΔ0.
       simpl in Hn.
       destruct Hn as [(f'&Hl'&Hn')|(_&_&NF&_)].
-      + rewrite (proj2 H4) in Hl'.
+      + apply lift_heap_fun in Hl'.
+        rewrite (proj2 H4) in Hl'.
         injection Hl' as Hl'; subst f'.
         exact Hn'.
       + exfalso.
         apply NF.
         exists f.
+        apply lift_heap_fun.
         tauto.
   Qed.
 
@@ -493,16 +556,17 @@ Section hoare_expr.
     unfold hoare.
     intros ???? Hsub HΔ HP HJ.
     unfold lift_assn, astore_uninit in HP; simpl in HP.
-    pose proof compatible_writable (HJ _) (proj1 HP) as H1.
+    pose proof join_writable (HJ _) (proj1 HP) as H1.
     split.
     - simpl.
       sets_unfold.
-      rewrite <- (proj2 H1).
+      rewrite (proj2 H1) in HP.
+      pose proof ((proj2 lift_heap_writable) (proj1 HP)).
       tauto.
     - intros ?? Hn.
       simpl in Hn.
       destruct Hn as (Hl'&Hl''&Hemp).
-      exists (λ l', if l =? l' then CZ I1 v else h l').
+      exists (λ l', if l =? l' then CFZ I1 v else h l').
       split.
       + unfold lift_assn, astore_int_q.
         simpl.
@@ -517,10 +581,10 @@ Section hoare_expr.
         destruct (Z.eq_dec l l').
         * subst l'.
           rewrite Z.eqb_refl.
-          rewrite Hl''.
+          rewrite (proj1 lift_heap_int (conj Hl'' eq_refl)).
           rewrite (proj1 H1).
           constructor.
-        * rewrite <- (Hemp _ n0).
+        * rewrite <- (proj1 lift_heap_eq (Hemp _ n0)).
           apply Z.eqb_neq in n0; rewrite n0.
           apply HJ.
   Qed.
@@ -534,16 +598,17 @@ Section hoare_expr.
     unfold hoare.
     intros ???? Hsub HΔ HP HJ.
     unfold lift_assn, astore_int_q in HP.
-    pose proof compatible_int (HJ _) (proj1 HP) as [??].
+    pose proof join_int (HJ _) (proj1 HP) as [??].
     split.
     - simpl.
       intros He.
       apply He.
-      exists x, v.
-      tauto.
+      exists v.
+      eapply lift_heap_int.
+      exact H.
     - intros ?? Hn.
       simpl in Hn; sets_unfold in Hn.
-      destruct Hn as [?[Hn ?]]; subst σ'.
+      destruct Hn as [Hn ?]; subst σ'.
       exists h.
       split; [|tauto].
       unfold asepcon.
@@ -554,7 +619,7 @@ Section hoare_expr.
       unfold lift_assn, astore_int_q.
       simpl snd in HP |- *.
       unfold aprop.
-      rewrite H in Hn; injection Hn as Hn.
+      rewrite (proj1 (proj2 lift_heap_int H)) in Hn; injection Hn as Hn.
       easy.
   Qed.
 
@@ -836,22 +901,22 @@ Section hoare_mach.
   (* we default to lists while you can use more efficient representations. *)
   Definition code := list (Z * ins).
 
-  Fixpoint astore_array_q a q l: assn heap :=
+  Fixpoint astore_array_q a q l: assn fic_heap :=
     match l with
     | [] => aemp
     | n :: l' => asepcon (astore_int_q a q n) (astore_array_q (a + 1) q l')
     end.              
 
-  Definition astore_ins_q a q i: assn heap :=
+  Definition astore_ins_q a q i: assn fic_heap :=
     astore_array_q a q (encode i).
 
-  Fixpoint astore_code_q q (c: code): assn heap :=
+  Fixpoint astore_code_q q (c: code): assn fic_heap :=
     match c with
     | [] => aemp
     | (a, i) :: c' => asepcon (astore_ins_q a q i) (astore_code_q q c')
     end.
 
-  Definition lift_assn_heap_ΣA_base (P: assn heap): assn ΣA_base :=
+  Definition lift_assn_heap_ΣA_base (P: assn fic_heap): assn fic_LΣ :=
     λ σ, MSA_empty (rg σ) ∧ MSA_empty (st σ) ∧ P (hp σ).
 
   Notation "'⇑'" := lift_assn_heap_ΣA_base.
@@ -916,13 +981,13 @@ Section hoare_mach.
       tauto.
   Qed.
 
-  Definition areg_int (r: reg) (n: Z): assn ΣA_base :=
+  Definition areg_int (r: reg) (n: Z): assn fic_LΣ :=
     λ σ, rg σ r = Some n ∧ (∀ r', r ≠ r' → rg σ r' = None)
        ∧ MSA_empty (st σ) ∧ MSA_empty (hp σ).
 
   Definition areg_uninit r := aex (λ n, areg_int r n).
 
-  Definition astack_int (a n: Z): assn ΣA_base :=
+  Definition astack_int (a n: Z): assn fic_LΣ :=
     λ σ, st σ a = Some n ∧ (∀ a', a ≠ a' → st σ a' = None)
        ∧ MSA_empty (rg σ) ∧ MSA_empty (hp σ).
 
@@ -1192,8 +1257,8 @@ Definition hoare_prog_ok (Δ: prog_spec) (χ_ok: sem_ok) :=
     | inl (f, vs, σ), inl (n, σ') =>
         ∀ Φ Ψ h g,
           (f, FunSpec Φ Ψ) ∈ fst Δ
-        → eval_assn (Φ vs) (Δ, h) → join h g σ
-        → ∃ h', eval_assn (Ψ vs n) (Δ, h') ∧ join h' g σ'
+        → eval_assn (Φ vs) (Δ, h) → join h g (lift_heap σ)
+        → ∃ h', eval_assn (Ψ vs n) (Δ, h') ∧ join h' g (lift_heap σ')
     | inr σ, inr σ' =>
         ∀ Φ Ψ h g,
           MachSpec Φ Ψ ∈ snd Δ
@@ -1274,7 +1339,7 @@ Definition hoare_prog_er (Δ: prog_spec) (χ_er: sem_er) :=
     | inl (f, vs, σ) =>
         ∀ Φ Ψ h g,
           (f, FunSpec Φ Ψ) ∈ fst Δ
-        → eval_assn (Φ vs) (Δ, h) → join h g σ
+        → eval_assn (Φ vs) (Δ, h) → join h g (lift_heap σ)
         → False
     | inr σ =>
         ∀ Φ Ψ h g,

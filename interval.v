@@ -37,13 +37,13 @@ Qed.
 Definition I := { C: I_ → Prop | ∃ q, C = I_eq q }.
 
 Lemma I_eq_split: forall C1 C2 H1 H2 (p: C1 = C2),
-    eq_rect C1 (λ C, (∃ q, C = I_eq q)) H1 C2 p = H2 
+    eq_rect C1 (λ C, (∃ q, C = I_eq q)) H1 C2 p = H2
   → (exist _ C1 H1 : I) = (exist _ C2 H2 : I).
 Proof.
   intros.
   destruct p.
   simpl in H.
-  rewrite <- H.
+  rewrite<- H.
   reflexivity.
 Qed.
 
@@ -65,10 +65,10 @@ Proof.
   - apply functional_extensionality; intros.
     apply propositional_extensionality.
     split; intros.
-    + rewrite <- H0.
+    + rewrite<- H0.
       symmetry.
       apply H.
-    + rewrite <- H0.
+    + rewrite<- H0.
       apply H.
   - apply (I_eq_split _ _ _ _ H0).
     apply proof_irrelevance.
@@ -129,7 +129,7 @@ Section Elim.
     rewrite e.
     pose (eq_liftI (liftI_inj x2)).
     specialize (fP x1 x (liftI_inj x2)).
-    rewrite <- fP.
+    rewrite<- fP.
     f_equal.
     apply proof_irrelevance.
   Qed.
@@ -209,7 +209,7 @@ Section Iadd_aux2.
       subst x.
       apply Iadd_aux1E.
       apply Iadd_aux1E in H0.
-      rewrite <- H0.
+      rewrite<- H0.
       unfold I_eq in H.
       rewrite H.
       reflexivity.
@@ -217,7 +217,7 @@ Section Iadd_aux2.
       subst x.
       apply Iadd_aux1E.
       apply Iadd_aux1E in H0.
-      rewrite <- H0.
+      rewrite<- H0.
       unfold I_eq in H.
       rewrite H.
       reflexivity.
@@ -261,7 +261,7 @@ Section Iadd.
       subst x0.
       apply Iadd_aux2E.
       apply Iadd_aux2E in H0.
-      rewrite <- H0.
+      rewrite<- H0.
       unfold I_eq in H.
       rewrite H.
       reflexivity.
@@ -271,7 +271,7 @@ Section Iadd.
       subst x0.
       apply Iadd_aux2E.
       apply Iadd_aux2E in H0.
-      rewrite <- H0.
+      rewrite<- H0.
       unfold I_eq in H.
       rewrite H.
       reflexivity.

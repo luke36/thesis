@@ -114,6 +114,21 @@ Arguments AWand {Σ}.
 Arguments AEx {Σ} {A}.
 Arguments AAll {Σ} {A}.
 
+Declare Custom Entry Assn.
+
+Notation "∃ x .. y , P" := (AEx (λ x, .. (AEx (λ y, P)) .. )) (in custom Assn at level 95, x binder, y binder).
+Notation "∀ x .. y , P" := (AAll (λ x, .. (AAll (λ y, P)) .. )) (in custom Assn at level 95, x binder, y binder).
+Notation "P ⇒ Q" := (AImply P Q) (in custom Assn at level 90, right associativity).
+Notation "P ∨ Q" := (ADisj P Q) (in custom Assn at level 85, right associativity).
+Notation "P ∧ Q" := (AConj P Q) (in custom Assn at level 80, right associativity).
+Notation "P -* Q" := (AWand P Q) (in custom Assn at level 75, right associativity).
+Notation "P * Q" := (ASepCon P Q) (in custom Assn at level 70, right associativity).
+Notation "⌈ P ⌉" := (ALift P) (in custom Assn, P custom assn).
+Notation "( P )" := P (in custom Assn, P at level 100).
+Notation "x" := x (in custom Assn at level 0, x constr at level 0).
+Notation "f a" := (f a) (in custom Assn at level 0, a at level 0). (* ok? *)
+(* Notation "⦅ x ⦆" := x (in custom Assn, x constr). *)
+
 Definition prog_spec: Type := (string → fun_spec → Prop) * (mach_spec → Prop).
 
 Definition lift_Σ Σ: Type := prog_spec * Σ.
@@ -130,7 +145,7 @@ Notation "'low'" := snd (only parsing).
 Definition lift_assn {Σ} (P: assn Σ): assn (lift_Σ Σ) :=
   λ σ, P (low σ).
 
-Notation "'↑'" := lift_assn.
+Notation "[ P ]" := (lift_assn P) (in custom assn, P at level 100).
 
 Definition afun_spec {Σ} (f: string) (H: fun_spec): assn (lift_Σ Σ) :=
   λ σ, (f, H) ∈ fst (spec σ).
@@ -142,7 +157,7 @@ Definition eval_assn {Σ} `{MultiUnitSepAlg Σ}
   (P: Assn Σ): assn (lift_Σ Σ).
 Proof.
   induction P.
-  - exact (↑P).
+  - exact (lift_assn P).
   - exact (afun_spec f H).
   - exact (amach_spec H).
   - exact (aconj (IHP1 H0) (IHP2 H0)).
@@ -153,6 +168,8 @@ Proof.
   - exact (aex (λ a, X a H0)).
   - exact (aall (λ a, X a H0)).
 Defined.
+
+Notation "⟦ P ⟧" := (eval_assn P).
 
 Definition hoare_prog_fun (Δ: prog_spec) (χ_ok: sem_ok) (χ_er: sem_er) :=
   ∀ f Φ Ψ vs h g σ,
@@ -174,18 +191,26 @@ Definition hoare_prog_mach (Δ: prog_spec) (χ_ok: sem_ok) (χ_er: sem_er) :=
 Definition hoare_prog (Δ: prog_spec) (χ_ok: sem_ok) (χ_er: sem_er) :=
   hoare_prog_fun Δ χ_ok χ_er ∧ hoare_prog_mach Δ χ_ok χ_er.
 
+Definition empty_but (l: Z): assn fic_heap := λ σ, ∀ l', l ≠ l' → MSA_empty (σ l').
+
+Definition astore_int_q l q v: assn fic_heap :=
+  λ σ, σ l = CFZ q v ∧ empty_but l σ.
+Definition astore_int l v := astore_int_q l I1 v.
+
+Notation "a ↦ [ q ] v" := (astore_int_q a q v) (in custom assn at level 50, q constr).
+Notation "a ↦ v" := (astore_int a v) (in custom assn at level 50).
+
+Definition astore_uninit (l: Z): assn fic_heap :=
+  λ σ, frag_writable (σ l) ∧ empty_but l σ.
+
+Notation "a ↦ -" := (astore_uninit a) (in custom assn at level 50).
+
+Definition astore_fun (l: Z) (H: fun_spec): assn ΣC :=
+  λ σ, ∃ f, low σ l = CFFun f ∧ (f, H) ∈ fst (spec σ) ∧ MSA_empty σ.
+
+Notation "{{{ Φ }}} 'fun' a {{{ Ψ }}}" := (astore_fun a (FunSpec Φ Ψ)) (in custom assn at level 50, Φ custom Assn, Ψ custom Assn, a constr).
+
 Section hoare_expr.
-
-  Definition empty_but (l: Z): assn fic_heap := λ σ, ∀ l', l ≠ l' → MSA_empty (σ l').
-
-  Definition astore_int_q l q v: assn fic_heap :=
-    λ σ, σ l = CFZ q v ∧ empty_but l σ.
-
-  Definition astore_uninit (l: Z): assn fic_heap :=
-    λ σ, frag_writable (σ l) ∧ empty_but l σ.
-
-  Definition astore_fun (l: Z) (H: fun_spec): assn ΣC :=
-    λ σ, ∃ f, low σ l = CFFun f ∧ (f, H) ∈ fst (spec σ) ∧ MSA_empty σ.
 
   Variable χ_ok: sem_ok.
   Variable χ_er: sem_er.
@@ -316,7 +341,7 @@ Section hoare_expr.
   Qed.
 
   Theorem hoare_var: ∀ {x},
-      hoare aemp (EVar x) (λ m, aprop (x = m)).
+      hoare aemp (EVar x) (λ m, ⦃ ⟨ x = m ⟩ ⦄).
   Proof.
     intros.
     unfold hoare.
@@ -340,7 +365,7 @@ Section hoare_expr.
   Qed.
 
   Theorem hoare_val: ∀ {n},
-      hoare aemp (EVal n) (λ m, aprop (n = m)).
+      hoare aemp (EVal n) (λ m, ⦃ ⟨ n = m ⟩ ⦄).
   Proof.
     intros.
     unfold hoare.
@@ -364,7 +389,7 @@ Section hoare_expr.
   Qed.
 
   Theorem hoare_arith: ∀ {op e₁ e₂},
-      hoare aemp (EArith op e₁ e₂) (λ n, aprop (n = (eval_arith_op op) e₁ e₂)).
+      hoare aemp (EArith op e₁ e₂) (λ n, ⦃ ⟨ n = (eval_arith_op op) e₁ e₂ ⟩ ⦄).
   Proof.
     intros.
     unfold hoare.
@@ -389,7 +414,7 @@ Section hoare_expr.
 
   Theorem hoare_comp: ∀ {op e₁ e₂},
       hoare aemp (EComp op e₁ e₂)
-        (λ n, aprop ((eval_comp_op op) e₁ e₂ ∧ n = 1 ∨ (¬ (eval_comp_op op) e₁ e₂) ∧ n = 0)).
+            (λ n, ⦃ ⟨ (eval_comp_op op) e₁ e₂ ∧ n = 1 ∨ (¬ (eval_comp_op op) e₁ e₂) ∧ n = 0⟩ ⦄).
   Proof.
     intros.
     unfold hoare.
@@ -435,7 +460,7 @@ Section hoare_expr.
   Qed.
 
   Theorem hoare_assume: ∀ {e},
-      hoare aemp (EAssume e) (λ _, (aprop (e ≠ 0))).
+      hoare aemp (EAssume e) (λ _, ⦃ ⟨ e ≠ 0 ⟩ ⦄).
   Proof.
     intros ?.
     unfold hoare.
@@ -469,11 +494,11 @@ Section hoare_expr.
       apply (conj HP HJ).
   Qed.
 
-  Theorem hoare_fun_addr: ∀ {f H},
-      (f, H) ∈ fst Δ
-    → hoare aemp (EFunAddr f) (λ l, astore_fun l H).
+  Theorem hoare_fun_addr: ∀ {f Φ Ψ},
+      (f, FunSpec Φ Ψ) ∈ fst Δ
+    → hoare aemp (EFunAddr f) (λ v, ⦃ {{{Φ}}}fun v{{{Ψ}}} ⦄).
   Proof.
-    intros ?? HH.
+    intros ??? HH.
     unfold hoare.
     intros ???? Hsub HΔ HP HJ.
     split.
@@ -487,19 +512,19 @@ Section hoare_expr.
       + unfold lift_assn, astore_fun.
         exists f.
         pose proof MSA_prod_empty HP.
-        apply lift_heap_fun in H1.
-        pose proof (MSA_positive' (HJ n) (fun_empty H1)).
+        apply lift_heap_fun in H0.
+        pose proof (MSA_positive' (HJ n) (fun_empty H0)).
         simpl.
-        rewrite (proj1 H2).
+        rewrite (proj1 H1).
         apply Hsub in HH.
         tauto.
       + apply HJ.
   Qed.
 
   Theorem hoare_call: ∀ {l Φ Ψ vs},
-      hoare (asepcon (astore_fun l (@FunSpec Φ Ψ)) (eval_assn (Φ vs)))
+      hoare ⦃ {{{Φ}}}fun l{{{Ψ}}} * ⟦Φ vs⟧ ⦄
             (ECall l vs)
-            (λ n, eval_assn (Ψ vs n)).
+            (λ n, ⟦Ψ vs n⟧).
   Proof.
     intros ????.
     unfold hoare.
@@ -548,9 +573,9 @@ Section hoare_expr.
   Qed.
 
   Theorem hoare_store: ∀ {l v},
-      hoare (↑(astore_uninit l))
+      hoare ⦃ [l ↦ -] ⦄
             (EStore l v)
-            (λ _, ↑(astore_int_q l I1 v)).
+            (λ _, ⦃ [l ↦ v] ⦄).
   Proof.
     intros ??.
     unfold hoare.
@@ -584,15 +609,15 @@ Section hoare_expr.
           rewrite (proj1 lift_heap_int (conj Hl'' eq_refl)).
           rewrite (proj1 H1).
           constructor.
-        * rewrite <- (proj1 lift_heap_eq (Hemp _ n0)).
+        * rewrite<- (proj1 lift_heap_eq (Hemp _ n0)).
           apply Z.eqb_neq in n0; rewrite n0.
           apply HJ.
   Qed.
 
   Theorem hoare_load: ∀ {l q v},
-      hoare (↑(astore_int_q l q v))
+      hoare ⦃ [l ↦[q] v] ⦄
             (ELoad l)
-            (λ n, asepcon (↑(astore_int_q l q v)) (aprop (n = v))).
+            (λ n, ⦃ [l ↦[q] v] * ⟨n = v⟩ ⦄).
   Proof.
     intros ???.
     unfold hoare.
@@ -625,7 +650,7 @@ Section hoare_expr.
 
   Theorem hoare_frame: ∀ {P Q F e},
       hoare P e Q
-    → hoare (asepcon P F) e (λ n, asepcon (Q n) F).
+    → hoare ⦃ P * F ⦄ e (λ n, ⦃ Q n * F ⦄).
   Proof.
     intros ???? H.
     unfold hoare.
@@ -657,16 +682,14 @@ Section hoare_expr.
         tauto.
   Qed.
 
-  Theorem hoare_conseq: ∀ {P P' Q' Q e},
-      derivable P P'
-    → (∀ n, derivable (Q' n) (Q n))
-    → hoare P' e Q'
+  Theorem hoare_conseq: ∀ {P Q' Q e},
+      (∀ n, (Q' n) ⊢ (Q n))
+    → hoare P e Q'
     → hoare P e Q.
   Proof.
-    intros ????? H1 H2 H.
+    intros ???? H2 H.
     unfold hoare.
     intros ???? Hsub HΔ HP HJ.
-    apply H1 in HP.
     specialize (H _ _ _ _ Hsub HΔ HP HJ).
     split; [tauto|].
     intros ?? Hn.
@@ -680,32 +703,85 @@ Section hoare_expr.
     - tauto.
   Qed.
 
-  Theorem hoare_prop: ∀ {P e Q} {p: Prop},
-      (p → hoare P e Q)
-    ↔ hoare (asepcon P (aprop p)) e Q.
+  Definition wp (e: expr Z expr_sem) (Q: Z → assn ΣC): assn ΣC :=
+    λ h, ∀ Δ' g σ,
+        spec_include Δ Δ' → hoare_prog Δ' χ_ok χ_er
+      → join h g (Δ', lift_heap σ)
+      → ¬ σ ∈ er (eval_expr' χ_ok χ_er e)
+      ∧ ∀ n σ',
+          (σ, n, σ') ∈ ok (eval_expr' χ_ok χ_er e)
+        → ∃ h', Q n h' ∧ join h' g (Δ', lift_heap σ').
+
+  Lemma wp_hoare: ∀ {P e Q},
+      derivable P (wp e Q) ↔ hoare P e Q.
   Proof.
-    intros ????.
-    split.
-    - intros H.
-      unfold hoare.
+    intros ???.
+    split; intros H.
+    - unfold hoare.
       intros ???? Hsub HΔ HP HJ.
-      unfold asepcon in HP.
-      destruct HP as (σ₁&σ₂&?&?&?).
-      unfold aprop in H2.
-      destruct H2 as [??].
-      apply MSA_comm in H0.
-      pose proof MSA_join_empty H0 H3.
-      subst σ₁.
-      eapply (H H2); eauto.
-    - intros H Hp.
-      unfold hoare, asepcon in H.
-      intros ????????.
-      eapply H; eauto.
-      pose proof MSA_unit (Δ', h) as [u X].
-      pose proof MSA_unit_empty X.
-      exists (Δ', h), u.
-      apply MSA_comm in X.
+      apply H in HP.
+      unfold wp in HP.
+      specialize (HP _ _ _ Hsub HΔ (conj (conj eq_refl eq_refl) HJ
+                      : join (Δ', h) (Δ', g) (Δ', lift_heap σ))).
+      split; [apply HP|].
+      intros ?? Hn.
+      pose proof (proj2 HP _ _ Hn) as ((?&h')&HQ&HJ').
+      pose proof (proj1 HJ') as [H0 ?].
+      pose proof (proj2 HJ') as H0'.
+      simpl in H0, H0'.
+      subst p.
+      exists h'.
       easy.
+    - unfold derivable, wp.
+      intros (?&h) HP ? (?&g) ? Hsub HΔ HJ.
+      pose proof proj1 HJ as [H0 H1]; simpl in H0, H1; subst p p0.
+      unfold hoare in H.
+      specialize (H _ _ _ _ Hsub HΔ HP (proj2 HJ)).
+      split; [apply H|].
+      intros ?? Hn.
+      pose proof (proj2 H _ _ Hn) as [h' [HQ HJ']].
+      exists (Δ', h').
+      easy.
+  Qed.
+
+  Theorem hoare_conseq': ∀ {P P' Q e},
+      P ⊢ P'
+    → hoare P' e Q
+    → hoare P e Q.
+  Proof.
+    intros.
+    rewrite<- wp_hoare in H0.
+    rewrite<- wp_hoare.
+    eapply derivable_trans.
+    apply H.
+    exact H0.
+  Qed.
+
+  Theorem hoare_prop: ∀ {P e Q} {p: Prop},
+      hoare ⦃ P * ⟨p⟩ ⦄ e Q
+    ↔ (p → hoare P e Q).
+  Proof.
+    intros.
+    rewrite<-! wp_hoare.
+    exact derivable_prop_l.
+  Qed.
+
+  Theorem hoare_exist: ∀ {A} {P: A → assn ΣC} {e Q} {p: Prop},
+      hoare ⦃ ∃ x, P x ⦄ e Q
+    ↔ ∀ x, hoare (P x) e Q.
+  Proof.
+    intros.
+    setoid_rewrite<- wp_hoare.
+    exact derivable_exist_l.
+  Qed.
+
+  Theorem hoare_disj: ∀ {P Q R} {e},
+    hoare ⦃ P ∨ R ⦄ e Q
+  ↔ hoare P e Q ∧ hoare R e Q.
+  Proof.
+    intros.
+    rewrite<-! wp_hoare.
+    exact derivable_disj_l.
   Qed.
 
 End hoare_expr.
@@ -874,6 +950,58 @@ Qed.
 
 (* More about proof-relevant multistep End. *)
 
+(* we default to lists while you can use more efficient representations. *)
+Definition code := list (Z * ins).
+
+Fixpoint astore_array_q a q l: assn fic_heap :=
+  match l with
+  | [] => aemp
+  | n :: l' => asepcon (astore_int_q a q n) (astore_array_q (a + 1) q l')
+  end.
+
+Definition astore_array a l := astore_array_q a I1 l.
+
+Definition astore_ins_q a q i: assn fic_heap :=
+  astore_array_q a q (encode i).
+
+Fixpoint astore_code_q q (c: code): assn fic_heap :=
+  match c with
+  | [] => aemp
+  | (a, i) :: c' => asepcon (astore_ins_q a q i) (astore_code_q q c')
+  end.
+
+Definition astore_code c := astore_code_q I1 c.
+
+Notation "'c↦' [ q ] c" := (astore_code_q q c) (in custom assn at level 50, q constr).
+Notation "'c↦' c" := (astore_code c) (in custom assn at level 50).
+
+Definition lift_assn_heap_ΣA_base (P: assn fic_heap): assn fic_LΣ :=
+  λ σ, MSA_empty (rg σ) ∧ MSA_empty (st σ) ∧ P (hp σ).
+
+Notation "⌈ P ⌉" := (lift_assn_heap_ΣA_base P) (in custom assn, P at level 100).
+
+Definition areg_int (r: reg) (n: Z): assn fic_LΣ :=
+  λ σ, rg σ r = Some n ∧ (∀ r', r ≠ r' → rg σ r' = None)
+       ∧ MSA_empty (st σ) ∧ MSA_empty (hp σ).
+
+Definition areg_any r := aex (λ n, areg_int r n).
+
+Definition astack_int (a n: Z): assn fic_LΣ :=
+  λ σ, st σ a = Some n ∧ (∀ a', a ≠ a' → st σ a' = None)
+       ∧ MSA_empty (rg σ) ∧ MSA_empty (hp σ).
+
+Definition astack_any a := aex (λ n, astack_int a n).
+
+Notation "a r↦ v" := (areg_int a v) (in custom assn at level 50).
+Notation "a r↦ -" := (areg_any a) (in custom assn at level 50).
+Notation "a s↦ v" := (astack_int a v) (in custom assn at level 50).
+Notation "a s↦ -" := (astack_any a) (in custom assn at level 50).
+
+Definition amach_spec_mach (H: mach_spec): assn ΣA :=
+  λ σ, H ∈ snd (spec σ) ∧ MSA_empty (low σ).
+
+Notation "{{{ Φ }}} mach {{{ Ψ }}}" := (amach_spec_mach (MachSpec Φ Ψ)) (in custom assn at level 50).
+
 Section hoare_mach.
 
   Variable χ_ok: sem_ok.
@@ -898,36 +1026,11 @@ Section hoare_mach.
         nontrivial_split x σ'
       ∧ Q (Δ', h') ∧ join h' g (lift_LΣ σ').
 
-  (* we default to lists while you can use more efficient representations. *)
-  Definition code := list (Z * ins).
-
-  Fixpoint astore_array_q a q l: assn fic_heap :=
-    match l with
-    | [] => aemp
-    | n :: l' => asepcon (astore_int_q a q n) (astore_array_q (a + 1) q l')
-    end.              
-
-  Definition astore_ins_q a q i: assn fic_heap :=
-    astore_array_q a q (encode i).
-
-  Fixpoint astore_code_q q (c: code): assn fic_heap :=
-    match c with
-    | [] => aemp
-    | (a, i) :: c' => asepcon (astore_ins_q a q i) (astore_code_q q c')
-    end.
-
-  Definition lift_assn_heap_ΣA_base (P: assn fic_heap): assn fic_LΣ :=
-    λ σ, MSA_empty (rg σ) ∧ MSA_empty (st σ) ∧ P (hp σ).
-
-  Notation "'⇑'" := lift_assn_heap_ΣA_base.
-
   Definition hoare_code_final P c Q :=
-    ∀ q, hoare_final (asepcon P (↑(⇑(astore_code_q q c))))
-                     (asepcon Q (↑(⇑(astore_code_q q c)))).
+    ∀ q, hoare_final ⦃ P * [⌈c↦[q] c⌉] ⦄ ⦃ Q * [⌈c↦[q] c⌉] ⦄.
 
   Definition hoare_code_steps P c Q :=
-    ∀ q, hoare_steps (asepcon P (↑(⇑(astore_code_q q c))))
-                     (asepcon Q (↑(⇑(astore_code_q q c)))).
+    ∀ q, hoare_steps ⦃ P * [⌈c↦[q] c⌉] ⦄ ⦃ Q * [⌈c↦[q] c⌉] ⦄.
 
   Theorem hoare_seq: ∀ {P Q R},
       hoare_steps P Q → hoare_steps Q R
@@ -951,7 +1054,7 @@ Section hoare_mach.
   Qed.
 
   Theorem hoare_inv: ∀ {I Q},
-      hoare_steps I (adisj I Q) → hoare_steps I Q.
+      hoare_steps I ⦃ I ∨ Q ⦄ → hoare_steps I Q.
   Proof.
     unfold hoare_steps.
     intros ?? H.
@@ -981,22 +1084,10 @@ Section hoare_mach.
       tauto.
   Qed.
 
-  Definition areg_int (r: reg) (n: Z): assn fic_LΣ :=
-    λ σ, rg σ r = Some n ∧ (∀ r', r ≠ r' → rg σ r' = None)
-       ∧ MSA_empty (st σ) ∧ MSA_empty (hp σ).
-
-  Definition areg_uninit r := aex (λ n, areg_int r n).
-
-  Definition astack_int (a n: Z): assn fic_LΣ :=
-    λ σ, st σ a = Some n ∧ (∀ a', a ≠ a' → st σ a' = None)
-       ∧ MSA_empty (rg σ) ∧ MSA_empty (hp σ).
-
-  Definition astack_uninit a := aex (λ n, astack_int a n).
-
   Theorem hoare_const: ∀ {r n i},
-    hoare_code_steps (↑(asepcon (areg_int PC i) (areg_uninit r)))
-                     [(i, IConst n r)]
-                     (↑(asepcon (areg_int PC (i + 3)) (areg_int r n))).
+      hoare_code_steps ⦃ [PC r↦ i] * [r r↦ -] ⦄
+                       [(i, IConst n r)]
+                       ⦃ [PC r↦ ⦅i + 3⦆] * [r r↦ n] ⦄.
   Proof.
     (* intros ???. *)
     (* unfold hoare_code_steps; intros q. *)
@@ -1038,95 +1129,104 @@ Section hoare_mach.
   Admitted.
 
   Theorem hoare_nop: ∀ {i},
-    hoare_code_steps (↑(areg_int PC i))
-                     [(i, INop)]
-                     (↑(areg_int PC (i + 1))).
+      hoare_code_steps ⦃ [PC r↦ i] ⦄
+                       [(i, INop)]
+                       ⦃ [PC r↦ ⦅i + 1⦆] ⦄.
   Proof. Admitted.
 
-  Theorem hoare_jmp_jump: ∀ {i r₁ r₂ x n},
+  Theorem hoare_jmp_jump: ∀ {i r x n},
       x > 0
     → hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (areg_int r₁ x) (areg_int r₂ n))))
-        [(i, IJmp r₁ r₂)]
-        (↑(asepcon (areg_int PC (i + n)) (asepcon (areg_int r₁ x) (areg_int r₂ n)))).
+        ⦃ [PC r↦ i] * [r r↦ x] ⦄
+        [(i, IJmp r n)]
+        ⦃ [PC r↦ ⦅i + n⦆] * [r r↦ x] ⦄.
   Proof. Admitted.
 
-  Theorem hoare_jmp_next: ∀ {i r₁ r₂ x n},
+  Theorem hoare_jmp_next: ∀ {i r x n},
       x <= 0
     → hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (areg_int r₁ x) (areg_int r₂ n))))
-        [(i, IJmp r₁ r₂)]
-        (↑(asepcon (areg_int PC (i + 3)) (asepcon (areg_int r₁ x) (areg_int r₂ n)))).
+        ⦃ [PC r↦ i] * [r r↦ x] ⦄
+        [(i, IJmp r n)]
+        ⦃ [PC r↦ ⦅i + 3⦆] * [r r↦ x] ⦄.
   Proof. Admitted.
 
   Theorem hoare_arith_two: ∀ {i op r₁ r₂ n m},
       hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (areg_int r₁ m) (areg_int r₂ n))))
+        ⦃ [PC r↦ i] * [r₁ r↦ m] * [r₂ r↦ n] ⦄
         [(i, IArith op r₁ r₂)]
-        (↑(asepcon (areg_int PC (i + 3)) (asepcon (areg_int r₁ m) (areg_int r₂ ((eval_arith_op op) n m))))).
+        ⦃ [PC r↦ ⦅i + 3⦆] * [r₁ r↦ m] * [r₂ r↦ ⦅(eval_arith_op op) n m⦆] ⦄.
   Proof. Admitted.
 
   Theorem hoare_arith_one: ∀ {i op r n},
       hoare_code_steps
-        (↑(asepcon (areg_int PC i) (areg_int r n)))
+        ⦃ [PC r↦ i] * [r r↦ n] ⦄
         [(i, IArith op r r)]
-        (↑(asepcon (areg_int PC (i + 3)) (areg_int r ((eval_arith_op op) n n)))).
+        ⦃ [PC r↦ ⦅i + 3⦆] * [r r↦ ⦅(eval_arith_op op) n n⦆] ⦄.
   Proof. Admitted.
 
   Theorem hoare_load_two: ∀ {i r₁ r₂ a n q},
       hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (⇑(astore_int_q a q n)) (asepcon (areg_int r₁ a) (areg_uninit r₂)))))
+        ⦃ [PC r↦ i] * [⌈a ↦[q] n⌉] * [r₁ r↦ a] * [r₂ r↦ -] ⦄
         [(i, ILoad r₁ r₂)]
-        (↑(asepcon (areg_int PC (i + 3)) (asepcon (⇑(astore_int_q a q n)) (asepcon (areg_int r₁ a) (areg_int r₂ n))))).
+        ⦃ [PC r↦ ⦅i + 3⦆] * [⌈a ↦[q] n⌉] * [r₁ r↦ a] * [r₂ r↦ n] ⦄.
   Proof. Admitted.
 
   Theorem hoare_load_one: ∀ {i r a n q},
       hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (⇑(astore_int_q a q n)) (areg_int r a))))
+        ⦃ [PC r↦ i] * [⌈a ↦[q] n⌉] * [r r↦ a] ⦄
         [(i, ILoad r r)]
-        (↑(asepcon (areg_int PC (i + 3)) (asepcon (⇑(astore_int_q a q n)) (areg_int r n)))).
+        ⦃ [PC r↦ ⦅i + 3⦆] * [⌈a ↦[q] n⌉] * [r r↦ n] ⦄.
   Proof. Admitted.
 
   Theorem hoare_store_two: ∀ {i r₁ r₂ a n},
       hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (⇑(astore_uninit a)) (asepcon (areg_int r₁ n) (areg_int r₂ a)))))
+        ⦃ [PC r↦ i] * [⌈a ↦ -⌉] * [r₁ r↦ n] * [r₂ r↦ a] ⦄
         [(i, ILoad r₁ r₂)]
-        (↑(asepcon (areg_int PC (i + 3)) (asepcon (⇑(astore_int_q a I1 n)) (asepcon (areg_int r₁ n) (areg_int r₂ a))))).
+        ⦃ [PC r↦ ⦅i + 3⦆] * [⌈a ↦ n⌉] * [r₁ r↦ n] * [r₂ r↦ a] ⦄.
   Proof. Admitted.
 
   Theorem hoare_store_one: ∀ {i r a},
       hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (⇑(astore_uninit a)) (areg_int r a))))
+        ⦃ [PC r↦ i] * [⌈a ↦ -⌉] * [r r↦ a] ⦄
         [(i, ILoad r r)]
-        (↑(asepcon (areg_int PC (i + 3)) (asepcon (⇑(astore_int_q a I1 a)) (areg_int r a)))).
+        ⦃ [PC r↦ ⦅i + 3⦆] * [⌈a ↦ a⌉] * [r r↦ a] ⦄.
   Proof. Admitted.
 
   Theorem hoare_load_stack_two: ∀ {i r₁ r₂ a n},
       hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (astack_int a n) (asepcon (areg_int r₁ a) (areg_uninit r₂)))))
+        ⦃ [PC r↦ i] * [a s↦ n] * [r₁ r↦ a] * [r₂ r↦ -] ⦄
         [(i, ILoad r₁ r₂)]
-        (↑(asepcon (areg_int PC (i + 3)) (asepcon (astack_int a n) (asepcon (areg_int r₁ a) (areg_int r₂ n))))).
+        ⦃ [PC r↦ ⦅i + 3⦆] * [a s↦ n] * [r₁ r↦ a] * [r₂ r↦ n] ⦄.
   Proof. Admitted.
 
   Theorem hoare_load_stack_one: ∀ {i r a n},
       hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (astack_int a n) (areg_int r a))))
+        ⦃ [PC r↦ i] * [a s↦ n] * [r r↦ a] ⦄
         [(i, ILoad r r)]
-        (↑(asepcon (areg_int PC (i + 3)) (asepcon (astack_int a n) (areg_int r n)))).
+        ⦃ [PC r↦ ⦅i + 3⦆] * [a s↦ n] * [r r↦ n] ⦄.
   Proof. Admitted.
 
   Theorem hoare_store_stack_two: ∀ {i r₁ r₂ a n},
       hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (astack_uninit a) (asepcon (areg_int r₁ n) (areg_int r₂ a)))))
+        ⦃ [PC r↦ i] * [a s↦ -] * [r₁ r↦ n] * [r₂ r↦ a] ⦄
         [(i, ILoad r₁ r₂)]
-        (↑(asepcon (areg_int PC (i + 3)) (asepcon (astack_int a n) (asepcon (areg_int r₁ n) (areg_int r₂ a))))).
+        ⦃ [PC r↦ ⦅i + 3⦆] * [a s↦ n] * [r₁ r↦ n] * [r₂ r↦ a] ⦄.
   Proof. Admitted.
 
   Theorem hoare_store_stack_one: ∀ {i r a},
       hoare_code_steps
-        (↑(asepcon (areg_int PC i) (asepcon (astack_uninit a) (areg_int r a))))
+        ⦃ [PC r↦ i] * [a s↦ -] * [r r↦ a] ⦄
         [(i, ILoad r r)]
-        (↑(asepcon (areg_int PC (i + 3)) (asepcon (astack_int a a) (areg_int r a)))).
+        ⦃ [PC r↦ ⦅i + 3⦆] * [a s↦ a] * [r r↦ a] ⦄.
+  Proof. Admitted.
+
+  Theorem hoare_call_mach: ∀ {i r p Φ Ψ' Ψ P F},
+      ⦃ P * [PC r↦ p] * [r r↦ p] ⦄ ⊢ ⦃ F * ⟦Φ⟧ ⦄
+    → ⟦Ψ⟧ ⊢ ⦃ [PC r↦ -] * Ψ' ⦄
+    → hoare_code_steps
+        ⦃ {{{Φ}}}mach{{{Ψ}}} * P * [PC r↦ i] * [r r↦ p] ⦄
+        [(i, ICall r)]
+        ⦃ F * [PC r↦ ⦅i + 2⦆] * Ψ' ⦄.
   Proof. Admitted.
 
 End hoare_mach.
@@ -1448,10 +1548,11 @@ Section hoare_cexpr.
     → @hoare χ_ok χ_er Δ P e (λ v, (asepcon P (Q v))).
   Proof.
     intros.
-    eapply hoare_conseq.
+    eapply hoare_conseq'.
     eapply derivable_trans.
     eapply (proj1 emp_sepcon_unit).
     eapply sepcon_comm.
+    eapply hoare_conseq.
     intros; apply sepcon_comm.
     eapply hoare_frame.
     apply H.
@@ -1486,15 +1587,9 @@ Section hoare_cexpr.
   Proof.
     intros.
     eapply hoare_conseq.
-    eapply derivable_trans.
-    eapply (proj1 emp_sepcon_unit).
-    eapply sepcon_comm.
-    intros.
-    eapply derivable_trans.
-    2: { eapply (proj2 emp_sepcon_unit). }
-    apply sepcon_comm.
-    eapply hoare_frame.
-    eapply hoare_skip.
+    intros. apply emp_sepcon_unit.
+    apply hoare_frame_emp.
+    apply hoare_skip.
   Qed.
 
   Theorem choare_while: ∀ {c e I Q},

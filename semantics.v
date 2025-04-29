@@ -57,9 +57,9 @@ Definition inc_pc (n: Z): LΣ → LΣ → Prop := λ σ σ', rg σ' PC = rg σ P
 
 Definition eval_nop_ok: ins_sem_ok := inc_pc 1.
 
-Definition eval_jmp_ok (r₁ r₂: reg): ins_sem_ok :=
-  λ σ σ', rg σ r₁ > 0 ∧ set_reg PC (rg σ PC + rg σ r₂) σ σ' 
-        ∨ rg σ r₁ <= 0 ∧ set_reg PC (rg σ PC + 3) σ σ'.
+Definition eval_jmp_ok r n: ins_sem_ok :=
+  λ σ σ', rg σ r > 0 ∧ set_reg PC (rg σ PC + n) σ σ'
+        ∨ rg σ r <= 0 ∧ set_reg PC (rg σ PC + 3) σ σ'.
 
 Section eval_call.
 
@@ -83,7 +83,7 @@ Section eval_call.
   Definition ret_reg := R0.
 
   Definition callee_saved (r: reg): Prop :=
-    match r with SP | R4 | R5 => True | _ => False end.
+    match r with SP | R3 | R4 | R5 => True | _ => False end.
 
   Definition well_preserve (σ σ': LΣ): Prop :=
     (∀ l, l < rg σ SP → st σ l = st σ' l)

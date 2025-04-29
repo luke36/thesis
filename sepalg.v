@@ -172,7 +172,7 @@ Inductive join_opt A: option A → option A → option A → Prop :=
 | JOpt1 a: join_opt A (Some a) None (Some a)
 | JOpt2 a: join_opt A None (Some a) (Some a).
 
-Hint Constructors join_opt.
+#[local] Hint Constructors join_opt.
 
 #[export] Instance option_MSA {A}: MultiUnitSepAlg (option A).
 Proof.
@@ -225,7 +225,7 @@ Inductive join_frag: cell_frag → cell_frag → cell_frag → Prop :=
 | JFragUndef2: join_frag CFEmp CFUndef CFUndef
 | JFragFun (f: string): join_frag (CFFun f) (CFFun f) (CFFun f).
 
-Hint Constructors join_frag.
+#[local] Hint Constructors join_frag.
 
 #[export] Instance cell_frag_MSA: MultiUnitSepAlg cell_frag.
 Proof.
@@ -373,6 +373,9 @@ Definition derivable {Σ} (P Q: assn Σ) :=
 Definition equiv {Σ} (P Q: assn Σ) :=
   derivable P Q ∧ derivable Q P.
 
+Notation "P ⊢ Q" := (derivable P Q) (at level 50, no associativity).
+Notation "P ⟛ Q" := (equiv P Q) (at level 50, no associativity).
+
 Definition aconj {Σ} (P Q: assn Σ): assn Σ :=
   λ σ, P σ ∧ Q σ.
 
@@ -400,8 +403,25 @@ Definition aemp {Σ} `{MultiUnitSepAlg Σ}: assn Σ :=
 Definition aprop {Σ} `{MultiUnitSepAlg Σ} (P: Prop): assn Σ :=
   λ σ, P ∧ MSA_empty σ.
 
+Declare Custom Entry assn.
+
+Notation "⦃ P ⦄" := P (P custom assn at level 100).
+Notation "⦅ x ⦆" := x (in custom assn, x constr).
+Notation "x" := x (in custom assn at level 0, x constr at level 0).
+Notation "f a" := (f a) (in custom assn at level 0, a at level 0). (* ok? *)
+Notation "∃ x .. y , P" := (aex (λ x, .. (aex (λ y, P)) .. )) (in custom assn at level 95, x binder, y binder).
+Notation "∀ x .. y , P" := (aall (λ x, .. (aall (λ y, P)) .. )) (in custom assn at level 95, x binder, y binder).
+Notation "P ⇒ Q" := (aimply P Q) (in custom assn at level 90, right associativity).
+Notation "P ∨ Q" := (adisj P Q) (in custom assn at level 85, right associativity).
+Notation "P ∧ Q" := (aconj P Q) (in custom assn at level 80, right associativity).
+Notation "P -* Q" := (awand P Q) (in custom assn at level 75, right associativity).
+Notation "P * Q" := (asepcon P Q) (in custom assn at level 70, right associativity).
+Notation "'emp'" := aemp (in custom assn at level 0).
+Notation "⟨ P ⟩" := (aprop P) (in custom assn, P constr).
+Notation "( P )" := P (in custom assn, P at level 100).
+
 Theorem derivable_trans: ∀ {Σ} {P Q R: assn Σ},
-    derivable P Q → derivable Q R → derivable P R.
+    P ⊢ Q → Q ⊢ R → P ⊢ R.
 Proof.
   unfold derivable.
   intros.
@@ -411,7 +431,7 @@ Proof.
 Qed.
 
 Theorem derivable_refl: ∀ {Σ} {P: assn Σ},
-    derivable P P.
+    P ⊢ P.
 Proof.
   unfold derivable.
   intros.
@@ -419,8 +439,8 @@ Proof.
 Qed.
 
 Theorem derivable_frame: ∀ {Σ} `{MultiUnitSepAlg Σ} {P Q} {F: assn Σ},
-    derivable P Q →
-    derivable (asepcon P F) (asepcon Q F).
+    P ⊢ Q →
+    ⦃ P * F ⦄ ⊢ ⦃ Q * F ⦄.
 Proof.
   unfold derivable.
   intros.
@@ -431,7 +451,7 @@ Proof.
 Qed.
 
 Theorem derivable_wand_l: ∀ {Σ} `{MultiUnitSepAlg Σ} {P Q: assn Σ},
-    derivable (asepcon P (awand P Q)) Q.
+    ⦃ P * (P -* Q) ⦄ ⊢ Q.
 Proof.
   unfold derivable.
   intros.
@@ -442,9 +462,8 @@ Proof.
 Qed.
 
 Theorem equiv_float_exists_sepcon: ∀ {Σ} `{MultiUnitSepAlg Σ}
-                                          A {P: assn Σ} {Q: A → assn Σ},
-    equiv (asepcon (aex (λ a, Q a)) P)
-          (aex (λ a, asepcon (Q a) P)).
+                                     {A} {P: assn Σ} {Q: A → assn Σ},
+    ⦃ (∃ a, Q a) * P ⦄ ⟛ ⦃ ∃ a, Q a * P ⦄.
 Proof.
   unfold equiv, derivable.
   split; intros.
@@ -459,8 +478,7 @@ Proof.
 Qed.
 
 Theorem sepcon_assoc: ∀ {Σ} `{MultiUnitSepAlg Σ} {P Q R: assn Σ},
-    equiv (asepcon (asepcon P Q) R)
-          (asepcon P (asepcon Q R)).
+    ⦃ (P * Q) * R ⦄ ⟛ ⦃ P * (Q * R) ⦄.
 Proof.
   unfold equiv, derivable.
   intros ? MSA ? ? ?.
@@ -488,8 +506,7 @@ Proof.
 Qed.
 
 Theorem sepcon_comm: ∀ {Σ} `{MultiUnitSepAlg Σ} {P Q: assn Σ},
-    equiv (asepcon P Q)
-          (asepcon Q P).
+    ⦃ P * Q ⦄ ⟛ ⦃ Q * P ⦄.
 Proof.
   unfold equiv, derivable.
   split; intros.
@@ -504,7 +521,7 @@ Proof.
 Qed.
 
 Theorem emp_sepcon_unit: ∀ {Σ} `{MultiUnitSepAlg Σ} {P: assn Σ},
-    equiv P (asepcon P aemp).
+    P ⟛ ⦃ P * emp ⦄.
 Proof.
   intros ???.
   unfold equiv, derivable.
@@ -523,3 +540,69 @@ Proof.
     exact H1.
 Qed.
 
+Theorem derivable_exist_l: ∀ {Σ} {A} {P: A → assn Σ} {Q},
+    ⦃ ∃ x, P x ⦄ ⊢ Q
+  ↔ ∀ x, P x ⊢ Q.
+Proof.
+  intros ????.
+  split; intros H.
+  - intros x.
+    unfold derivable in H |- *.
+    intros ? HP.
+    apply H.
+    unfold aex.
+    exists x.
+    apply HP.
+  - unfold derivable in H |- *.
+    intros ? Hex.
+    unfold aex in Hex.
+    destruct Hex.
+    eapply H.
+    eauto.
+Qed.
+
+Theorem derivable_prop_l: ∀ {Σ} `{MultiUnitSepAlg Σ} {P: assn Σ} {Q p},
+    ⦃ P * ⟨p⟩ ⦄ ⊢ Q
+  ↔ (p → P ⊢ Q).
+Proof.
+  intros ? H0 ???.
+  split; intros H.
+  - intros x.
+    unfold derivable in H |- *.
+    intros ? HP.
+    apply H.
+    unfold asepcon.
+    pose proof MSA_unit σ as [u X].
+    exists σ, u.
+    pose proof MSA_unit_empty X.
+    apply MSA_comm in X.
+    unfold aprop.
+    auto.
+  - unfold derivable in H |- *.
+    intros ? Hp.
+    unfold asepcon in Hp.
+    destruct Hp as (σ'&u&HJ&HP&Hp).
+    unfold aprop in Hp.
+    apply MSA_comm in HJ.
+    pose proof MSA_join_empty HJ (proj2 Hp).
+    subst σ'.
+    apply H; tauto.
+Qed.
+
+Theorem derivable_disj_l: ∀ {Σ} {P Q R: assn Σ},
+    ⦃ P ∨ R ⦄ ⊢ Q
+  ↔ P ⊢ Q ∧ R ⊢ Q.
+Proof.
+  intros ????.
+  split; intros.
+  - unfold derivable in H |- *.
+    unfold adisj in H.
+    split; intros; apply H; tauto.
+  - unfold derivable in H |- *.
+    unfold adisj.
+    intros ? [HP|HR].
+    + apply (proj1 H).
+      exact HP.
+    + apply (proj2 H).
+      exact HR.
+Qed.

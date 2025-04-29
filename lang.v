@@ -138,7 +138,7 @@ Inductive reg :=
 Inductive ins :=
 | IErr: ins | INop: ins | IRet: ins
 | ICall: reg → ins
-| IJmp: reg → reg → ins
+| IJmp: reg → Z → ins
 | IConst: Z → reg → ins
 | IArith: arith_op → reg → reg → ins
 | ILoad: reg → reg → ins
@@ -158,7 +158,7 @@ Definition decode (n: Z): ins + (Z → ins) + (Z → Z → ins) :=
   | 0 => inl (inl INop)
   | 1 => inl (inl IRet)
   | 2 => inl (inr (decode_reg ICall))
-  | 3 => inr (λ n m, decode_reg (λ r, decode_reg (IJmp r) m) n)
+  | 3 => inr (λ n m, decode_reg (λ r, IJmp r m) n)
   | 4 => inr (λ n, decode_reg (IConst n))
   | 5 => inr (λ n m, decode_reg (λ r, decode_reg (IArith OAdd r) m) n)
   | 6 => inr (λ n m, decode_reg (λ r, decode_reg (IArith OSub r) m) n)
@@ -181,7 +181,7 @@ Definition encode (i: ins): list Z :=
   | INop => [0]
   | IRet => [1]
   | ICall r => [2; encode_reg r]
-  | IJmp r₁ r₂ => [3; encode_reg r₁; encode_reg r₂]
+  | IJmp r n => [3; encode_reg r; n]
   | IConst n r => [4; n; encode_reg r]
   | IArith OAdd r₁ r₂ => [5; encode_reg r₁; encode_reg r₂]
   | IArith OSub r₁ r₂ => [6; encode_reg r₁; encode_reg r₂]

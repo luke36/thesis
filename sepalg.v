@@ -231,13 +231,8 @@ Inductive join_frag: cell_frag → cell_frag → cell_frag → Prop :=
 Proof.
   refine {| join := join_frag; MSA_fun := _; MSA_cancel := _; MSA_comm := _; MSA_assoc := _; MSA_unit := _ |}.
   - intros. invert H; invert H0; try reflexivity.
-    invI p; invI q; invI r; invI r0.
-    apply IaddE in H1.
-    apply IaddE in H5.
-    f_equal.
-    apply eq_liftI.
-    unfold I_eq.
-    psatz Q.
+    rewrite (Iadd_fun H1 H5).
+    reflexivity.
   - intros. invert H; invert H0; try reflexivity.
     + invI p; invI q.
       apply IaddE in H2.
@@ -251,18 +246,10 @@ Proof.
       pose proof I_toH x.
       exfalso.
       psatz Q.
-    + invI p; invI q; invI r; invI p0.
-      apply IaddE in H1; apply IaddE in H3.
-      f_equal.
-      apply eq_liftI.
-      unfold I_eq.
-      psatz Q.
+    + rewrite (Iadd_cancel H1 H3).
+      reflexivity.
   - intros. invert H; auto.
-    invI p; invI q; invI r.
-    apply IaddE in H0.
-    apply JFragFrct.
-    apply IaddE.
-    psatz Q.
+    apply (JFragFrct _ _ _ _ (Iadd_comm H0)).
   - intros.
     destruct y.
     + exists z.

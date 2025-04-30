@@ -297,12 +297,44 @@ Section Iadd.
 
 End Iadd.
 
+Ltac invI x := pose proof (I_inv x) as [??]; subst x.
+
+Lemma Iadd_fun: ∀ {p q r r'},
+    Iadd p q r → Iadd p q r' → r = r'.
+Proof.
+  intros.
+  invI p; invI q; invI r; invI r'.
+  apply IaddE in H, H0.
+  apply eq_liftI.
+  unfold I_eq.
+  psatz Q.
+Qed.
+
+Lemma Iadd_cancel: ∀ {p p' q r},
+    Iadd p q r → Iadd p' q r → p = p'.
+Proof.
+  intros.
+  invI p; invI q; invI r; invI p'.
+  apply IaddE in H, H0.
+  apply eq_liftI.
+  unfold I_eq.
+  psatz Q.
+Qed.
+
+Lemma Iadd_comm: ∀ {p q r},
+    Iadd p q r → Iadd q p r.
+Proof.
+  intros.
+  invI p; invI q; invI r.
+  apply IaddE in H.
+  apply IaddE.
+  psatz Q.
+Qed.
+
 Lemma one_in_I: 0 < 1%Q <= 1.
 Proof. psatz Q. Qed.
 
 Definition I1 := liftI (exist _ 1 one_in_I).
-
-Ltac invI x := pose proof (I_inv x) as [??]; subst x.
 
 Lemma I_add_pos: ∀ {p0 q: I_}, I_toQ p0 + I_toQ q > 0.
 Proof.

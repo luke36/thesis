@@ -1,6 +1,6 @@
 Require Import Unicode.Utf8_core.
-Require Import Lists.List. Import ListNotations.
 Require Import Strings.String.
+Require Import Lists.List. Import ListNotations.
 Require Import ZArith.ZArith.
 Require Import QArith.QArith.
 Require Import FunctionalExtensionality.
@@ -21,6 +21,8 @@ Local Open Scope list.
 
 Definition fic_heap := Z → cell_frag.
 #[export] Instance fic_heap_MSA: MultiUnitSepAlg fic_heap := index_prod_MSA cell_frag_MSA.
+Check assn_ring_theory.
+Add Ring Ring_assn_fic_heap: (assn_ring_theory fic_heap) (abstract).
 
 Definition fic_stack := Z → option Z.
 #[export] Instance fic_stack_MSA: MultiUnitSepAlg fic_stack := index_prod_MSA option_MSA.
@@ -30,6 +32,7 @@ Definition fic_reg := reg → option Z.
 
 Definition fic_LΣ: Type := fic_reg * fic_stack * fic_heap.
 #[export] Instance fic_LΣ_MSA: MultiUnitSepAlg fic_LΣ := prod_MSA (prod_MSA fic_reg_MSA fic_stack_MSA) fic_heap_MSA.
+Add Ring Ring_assn_fic_LΣ: (assn_ring_theory fic_LΣ) (abstract).
 
 Definition lift_heap (σ: heap): fic_heap :=
   λ a, match σ a with
@@ -71,6 +74,28 @@ Proof.
   intros.
   unfold lift_heap.
   split; [intros [H ?]|intros H];
+    destruct (σ a); try discriminate; try reflexivity;
+    injection H as H;
+    subst; tauto.
+Qed.
+
+Lemma lift_heap_undef: ∀ {σ a},
+    σ a = CUndef ↔ (lift_heap σ) a = CFUndef.
+Proof.
+  intros.
+  unfold lift_heap.
+  split; intros;
+    destruct (σ a); try discriminate; try reflexivity;
+    injection H as H;
+    subst; tauto.
+Qed.
+
+Lemma lift_heap_emp: ∀ {σ a},
+    σ a = CEmp ↔ (lift_heap σ) a = CFEmp.
+Proof.
+  intros.
+  unfold lift_heap.
+  split; intros;
     destruct (σ a); try discriminate; try reflexivity;
     injection H as H;
     subst; tauto.
@@ -126,7 +151,7 @@ Notation "P * Q" := (ASepCon P Q) (in custom Assn at level 70, right associativi
 Notation "⌈ P ⌉" := (ALift P) (in custom Assn, P custom assn).
 Notation "( P )" := P (in custom Assn, P at level 100).
 Notation "x" := x (in custom Assn at level 0, x constr at level 0).
-Notation "f a" := (f a) (in custom Assn at level 0, a at level 0). (* ok? *)
+Notation "f a" := (f a) (in custom Assn at level 1). (* ok? *)
 (* Notation "⦅ x ⦆" := x (in custom Assn, x constr). *)
 
 Definition prog_spec: Type := (string → fun_spec → Prop) * (mach_spec → Prop).
@@ -138,6 +163,8 @@ Definition ΣA: Type := lift_Σ fic_LΣ.
 
 #[export] Instance ΣC_MSA: MultiUnitSepAlg ΣC := prod_MSA discrete_MSA fic_heap_MSA.
 #[export] Instance ΣA_MSA: MultiUnitSepAlg ΣA := prod_MSA discrete_MSA fic_LΣ_MSA.
+Add Ring Ring_assn_ΣC: (assn_ring_theory ΣC) (abstract).
+Add Ring Ring_assn_ΣA: (assn_ring_theory ΣA) (abstract).
 
 Notation "'spec'" := fst (only parsing).
 Notation "'low'" := snd (only parsing).
@@ -228,10 +255,19 @@ Definition code := list (Z * ins).
 Fixpoint astore_array_q a q l: assn fic_heap :=
   match l with
   | [] => aemp
-  | n :: l' => asepcon (astore_int_q a q n) (astore_array_q (a + 1) q l')
+  | n :: l' => ⦃ astore_int_q a q n * astore_array_q ⦅a + 1⦆ q l' ⦄
   end.
 
 Definition astore_array a l := astore_array_q a I1 l.
+
+Definition astore_uninit_array a n: assn fic_heap :=
+  λ σ, n >= 0
+     ∧ (∀ l, a <= l < a + n → frag_writable (σ l))
+     ∧ (∀ l, (l < a ∨ l >= a + n) → MSA_empty (σ l)).
+
+Notation "a ↦.. [ q ] l" := (astore_array_q a q l) (in custom assn at level 50, q constr).
+Notation "a ↦.. l" := (astore_array a l) (in custom assn at level 50).
+Notation "a ↦.. n ×- " := (astore_uninit_array a n) (in custom assn at level 50, n constr).
 
 Definition astore_ins_q a q i: assn fic_heap :=
   astore_array_q a q (encode i).
@@ -239,40 +275,233 @@ Definition astore_ins_q a q i: assn fic_heap :=
 Fixpoint astore_code_q q (c: code): assn fic_heap :=
   match c with
   | [] => aemp
-  | (a, i) :: c' => asepcon (astore_ins_q a q i) (astore_code_q q c')
+  | (a, i) :: c' => ⦃ astore_ins_q a q i * astore_code_q q c' ⦄
   end.
 
 Definition astore_code c := astore_code_q I1 c.
 
-Notation "'c↦' [ q ] c" := (astore_code_q q c) (in custom assn at level 50, q constr).
-Notation "'c↦' c" := (astore_code c) (in custom assn at level 50).
+Notation "'↦c' [ q ] c" := (astore_code_q q c) (in custom assn at level 50, q constr).
+Notation "'↦c' c" := (astore_code c) (in custom assn at level 50).
 
-Definition lift_assn_heap_ΣA_base (P: assn fic_heap): assn fic_LΣ :=
+Definition lift_assn_heap_LΣ (P: assn fic_heap): assn fic_LΣ :=
   λ σ, MSA_empty (rg σ) ∧ MSA_empty (st σ) ∧ P (hp σ).
 
-Notation "⌈ P ⌉" := (lift_assn_heap_ΣA_base P) (in custom assn, P at level 100).
+Notation "⌈ P ⌉" := (lift_assn_heap_LΣ P) (in custom assn, P at level 100).
+
+Definition lift_assn_ΣC_ΣA (P: assn ΣC): assn ΣA :=
+  λ σ, MSA_empty (rg (low σ)) ∧ MSA_empty (st (low σ)) ∧ P (spec σ, hp (low σ)).
+
+Notation "⇑ P" := (lift_assn_ΣC_ΣA P) (in custom assn at level 50).
+
+Definition lower_assn_ΣA_ΣC (P: assn ΣA): assn ΣC :=
+  λ σ, (∀ τ, P τ → MSA_empty (rg τ) ∧ MSA_empty (st τ))
+     ∧ P (spec σ, (λ _, None, λ _, None, low σ)).
+
+Notation "⇓ P" := (lower_assn_ΣA_ΣC P) (in custom assn at level 50).
 
 Definition areg_int (r: reg) (n: Z): assn fic_LΣ :=
   λ σ, rg σ r = Some n ∧ (∀ r', r ≠ r' → rg σ r' = None)
        ∧ MSA_empty (st σ) ∧ MSA_empty (hp σ).
 
-Definition areg_any r := aex (λ n, areg_int r n).
+Definition areg_any r := ⦃ ∃ n, areg_int r n ⦄.
 
 Definition astack_int (a n: Z): assn fic_LΣ :=
   λ σ, st σ a = Some n ∧ (∀ a', a ≠ a' → st σ a' = None)
        ∧ MSA_empty (rg σ) ∧ MSA_empty (hp σ).
 
-Definition astack_any a := aex (λ n, astack_int a n).
+Definition astack_any a := ⦃ ∃ n, astack_int a n ⦄.
+
+Fixpoint astack_array a l: assn fic_LΣ :=
+  match l with
+  | [] => aemp
+  | v :: l' => ⦃ astack_int a v * astack_array ⦅a + 1⦆ l' ⦄
+  end.
 
 Notation "a r↦ v" := (areg_int a v) (in custom assn at level 50).
 Notation "a r↦ -" := (areg_any a) (in custom assn at level 50).
 Notation "a s↦ v" := (astack_int a v) (in custom assn at level 50).
 Notation "a s↦ -" := (astack_any a) (in custom assn at level 50).
+Notation "a s↦.. l" := (astack_array a l) (in custom assn at level 50).
 
-Definition amach_spec_mach (H: mach_spec): assn ΣA :=
+Definition amach_spec_mach {Σ} (H: mach_spec): assn (lift_Σ Σ) :=
   λ σ, H ∈ snd (spec σ) ∧ MSA_empty (low σ).
 
-Notation "'𝔐' {{{ Φ }}} {{{ Ψ }}}" := (amach_spec_mach (MachSpec Φ Ψ)) (in custom assn at level 50).
+Notation "'𝔐' {{{ Φ }}} {{{ Ψ }}}" := (amach_spec_mach (MachSpec Φ Ψ)) (in custom assn at level 50, Φ custom Assn, Ψ custom Assn).
+
+Definition caller_any := ⦃ R0 r↦ - * R1 r↦ - * R2 r↦ - ⦄.
+
+Definition caller_r0 n := ⦃ R0 r↦ n * R1 r↦ - * R2 r↦ - ⦄.
+
+Definition stack_up_any a: assn fic_LΣ :=
+  λ σ, (∀ l, l < a → MSA_empty (st σ l))
+     ∧ (∀ l, l >= a → ∃ n, st σ l = Some n)
+     ∧ MSA_empty (rg σ) ∧ MSA_empty (hp σ).
+
+Definition prologue l vs :=
+  ⦃ caller_any * SP r↦ l * l s↦.. vs * stack_up_any ⦅l + Z.of_nat (length vs)⦆ ⦄.
+
+Definition epilogue l n :=
+  ⦃ caller_r0 n * SP r↦ l * stack_up_any l ⦄.
+
+(* Predicates End.*)
+
+(* Predicates derivations. *)
+
+Lemma store_int_q_split: ∀ {a p q r n},
+    Iadd p q r
+  → ⦃ a ↦[p] n * a ↦[q] n ⦄ ⟛ ⦃ a ↦[r] n ⦄.
+Proof.
+  intros ????? Hpqr.
+  split; intros ? H.
+  - destruct H as (σ₁&σ₂&HJσ&Hp&Hq).
+    unfold astore_int_q in *.
+    split.
+    + specialize (HJσ a).
+      rewrite (proj1 Hp), (proj1 Hq) in HJσ.
+      invert HJσ.
+      rewrite (Iadd_fun Hpqr H0).
+      reflexivity.
+    + intros l ne.
+      pose proof proj2 Hp _ ne.
+      pose proof proj2 Hq _ ne.
+      specialize (HJσ l).
+      rewrite<- (MSA_join_empty HJσ H).
+      assumption.
+  - pose proof MSA_unit σ as [u X].
+    exists (λ l, if a =? l then CFZ p n else u l),
+           (λ l, if a =? l then CFZ q n else u l).
+    unfold astore_int_q in H.
+    split.
+    + intros l.
+      destruct (Z.eq_dec a l).
+      * subst l.
+        rewrite! Z.eqb_refl.
+        rewrite (proj1 H).
+        apply (JFragFrct _ _ _ _ Hpqr).
+      * rewrite (proj2 (Z.eqb_neq _ _) n0).
+        pose proof (proj2 H _ n0).
+        apply MSA_comm in X.
+        pose proof MSA_join_empty (X _) H0.
+        rewrite H1.
+        apply H0.
+    + unfold astore_int_q.
+      rewrite! Z.eqb_refl.
+      pose proof MSA_unit_empty X.
+      intuition;
+        intros l ne;
+        rewrite (proj2 (Z.eqb_neq _ _) ne);
+        apply H0.
+Qed.
+
+Lemma store_array_q_split: ∀ {a p q r l},
+    Iadd p q r
+  → ⦃ a ↦..[p] l * a ↦..[q] l ⦄ ⟛ ⦃ a ↦..[r] l ⦄.
+Proof.
+  intros.
+  generalize dependent a.
+  induction l.
+  - intros a.
+    simpl.
+    ring.
+  - rename a into v.
+    intros a.
+    simpl.
+    equiv_step_ring ⦃ (a ↦ [p] v * a ↦ [q] v) * (⦅a + 1⦆ ↦.. [p] l * ⦅a + 1⦆ ↦.. [q] l) ⦄.
+    apply sepcon_congr_2.
+    apply (store_int_q_split H).
+    apply IHl.
+Qed.
+
+Lemma store_code_q_split: ∀ {p q r c},
+    Iadd p q r
+  → ⦃ ↦c[p] c * ↦c[q] c ⦄ ⟛ ⦃ ↦c[r] c ⦄.
+Proof.
+  intros.
+  induction c.
+  - simpl.
+    ring.
+  - destruct a as [a i].
+    simpl.
+    equiv_step_ring ⦃ (astore_ins_q a p i * astore_ins_q a q i)
+                    * (↦c [p] c * ↦c [q] c) ⦄.
+    apply sepcon_congr_2.
+    apply (store_array_q_split H).
+    apply IHc.
+Qed.
+
+Lemma lift_assn_mono: ∀ {Σ} {P Q: assn Σ},
+    P ⊢ Q → ⦃ [P] ⦄ ⊢ ⦃ [Q] ⦄.
+Proof.
+  intros ???.
+  intros H.
+  intros ? HP.
+  unfold lift_assn in HP |- *.
+  apply H.
+  apply HP.
+Qed.
+
+Lemma lift_assn_heap_LΣ_mono: ∀ {P Q},
+    P ⊢ Q → ⦃ ⌈P⌉ ⦄ ⊢ ⦃ ⌈Q⌉ ⦄.
+Proof.
+  intros ??.
+  intros H.
+  intros ? HP.
+  unfold lift_assn_heap_LΣ in HP |- *.
+  pose proof (H (snd σ)).
+  tauto.
+Qed.
+
+Lemma lift_assn_sepcon_congr: ∀ {P Q},
+    ⦃ [P] * [Q] ⦄ ⟛ ⦃ [P * Q] ⦄.
+Proof.
+  intros ??.
+  split; intros ? H.
+  - unfold asepcon, lift_assn in H |- *.
+    destruct H as ((?&h1)&(?&h2)&(?&HJ)&HP&HQ).
+    simpl snd in *.
+    eauto.
+  - unfold asepcon, lift_assn in H |- *.
+    destruct H as (h1&h2&HJ&HP&HQ).
+    simpl snd in *.
+    exists (fst σ, h1), (fst σ, h2).
+    simpl snd.
+    intuition.
+    split; [simpl;tauto|apply HJ].
+Qed.
+
+Lemma lift_assn_heap_LΣ_sepcon_congr: ∀ {P Q},
+    ⦃ ⌈P⌉ * ⌈Q⌉ ⦄ ⟛ ⦃ ⌈P * Q⌉ ⦄.
+Proof.
+  intros ??.
+  split; intros ? H.
+  - unfold asepcon, lift_assn_heap_LΣ in H |- *.
+    destruct H as (((?&?)&h1)&((?&?)&h2)&(?&HJ)&HP&HQ).
+    pose proof (proj1 H).
+    pose proof (proj2 H).
+    simpl snd in *.
+    simpl fst in *.
+    pose proof MSA_join_empty H0 (proj1 HP); subst f1.
+    pose proof MSA_join_empty H1 (proj1 (proj2 HP)); subst f2.
+    intuition eauto.
+  - unfold asepcon, lift_assn_heap_LΣ in H |- *.
+    destruct H as (Hem1&Hem2&h1&h2&HJ&HP&HQ).
+    pose proof MSA_unit (rg σ) as [u1 X1].
+    pose proof MSA_unit (st σ) as [u2 X2].
+    pose proof MSA_unit_empty X1.
+    pose proof MSA_unit_empty X2.
+    exists (u1, u2, h1), (u1, u2, h2).
+    simpl fst.
+    simpl snd.
+    intuition.
+    split; [|apply HJ].
+    split; simpl fst; simpl snd.
+    + pose proof MSA_join_empty (MSA_comm X1) Hem1.
+      subst u1; auto.
+    + pose proof MSA_join_empty (MSA_comm X2) Hem2.
+      subst u2; auto.
+Qed.
+
+(* Predicates derivations end. *)
 
 Lemma destruct_sepcon_liftΣ: ∀ {Σ} {MSA: MultiUnitSepAlg Σ}
                                {P Q: assn (lift_Σ Σ)} {Δ σ},

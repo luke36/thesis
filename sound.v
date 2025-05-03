@@ -29,7 +29,7 @@ Definition provable_fun (Δ: prog_spec) (p: prog) :=
 Definition provable_mach (Δ: prog_spec) :=
   ∀ Φ Ψ,
     MachSpec Φ Ψ ∈ snd Δ
-  → M.Hoare Δ (eval_assn Φ) (eval_assn Ψ).
+  → M.HoareFinal Δ (eval_assn Φ) (eval_assn Ψ).
 
 Definition provable Δ p := provable_fun Δ p ∧ provable_mach Δ.
 
@@ -77,7 +77,7 @@ Proof.
       destruct Hn as [x Hn].
       destruct Hfs as [_ Hfs]; unfold provable_mach in Hfs.
       specialize (Hfs _ _ Hin).
-      unfold M.Hoare, M.hoare in Hfs.
+      unfold M.HoareFinal, M.hoare_final in Hfs.
       pose (mkProofContext Δ χ_ok χ_er Δ spec_include_refl H) as ctx.
       specialize (Hfs ctx _ _ _ HP HJ).
       apply Hfs.
@@ -127,7 +127,7 @@ Proof.
       destruct Hn as [x Hn].
       destruct Hfs as [_ Hfs]; unfold provable_mach in Hfs.
       specialize (Hfs _ _ Hin).
-      unfold M.Hoare, M.hoare in Hfs.
+      unfold M.HoareFinal, M.hoare_final in Hfs.
       pose (mkProofContext Δ χ_ok χ_er Δ spec_include_refl H) as ctx.
       specialize (Hfs ctx _ _ _ HP HJ).
       apply Hfs.

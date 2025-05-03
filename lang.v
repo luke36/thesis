@@ -26,7 +26,7 @@ Inductive expr (V: Type) (W: Type) :=
 | EFunAddr: string → expr V W
 | ECall: V → list V → expr V W
 | EAlloc: V → expr V W
-| EDealloc: V → expr V W
+| EDealloc: V → V → expr V W
 | EStore: V → V → expr V W
 | ELoad: V → expr V W
 | EArith: arith_op → V → V → expr V W
@@ -66,7 +66,7 @@ Inductive cexpr (V: Type) :=
 | CEFunAddr: string → cexpr V
 | CECall: cexpr V → list (cexpr V) → cexpr V
 | CEAlloc: cexpr V → cexpr V
-| CEDealloc: cexpr V → cexpr V
+| CEDealloc: cexpr V → cexpr V → cexpr V
 | CEStore: cexpr V → cexpr V → cexpr V
 | CELoad: cexpr V → cexpr V
 | CEArith: arith_op → cexpr V → cexpr V → cexpr V
@@ -88,6 +88,10 @@ Arguments CEArith {V}.
 Arguments CEComp {V}.
 
 Definition CExpr := ∀ V, cexpr V.
+
+Definition Cfun: Type := string * ∀ V, list V → cexpr V.
+
+Definition cprog := list Cfun.
 
 Section compile.
 
@@ -121,7 +125,7 @@ Section compile.
     | CEFunAddr f => EFunAddr f
     | CECall e es => EBind (compile e) (λ f, compile_call compile es (λ vs, ECall f vs))
     | CEAlloc e => EBind (compile e) (λ v, EAlloc v)
-    | CEDealloc e => EBind (compile e) (λ v, EDealloc v)
+    | CEDealloc e₁ e₂ => EBind (compile e₁) (λ l, EBind (compile e₂) (λ v, EDealloc l v))
     | CEStore e₁ e₂ => EBind (compile e₁) (λ l, EBind (compile e₂) (λ v, EStore l v))
     | CELoad e => EBind (compile e) (λ v, ELoad v)
     | CEArith op e₁ e₂ => EBind (compile e₁) (λ v₁, EBind (compile e₂) (λ v₂, EArith op v₁ v₂))

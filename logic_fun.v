@@ -1,6 +1,7 @@
 Require Import Unicode.Utf8_core.
 Require Import Strings.String.
 Require Import ZArith.ZArith.
+Require Import Lia.
 
 Require Import SetsClass.SetsClass. Import SetsNotation.
 Require Import FP.SetsFixedpoints.
@@ -311,17 +312,16 @@ Section hoare_expr.
       split.
       + unfold lift_assn, astore_fun.
         exists f.
-        pose proof MSA_prod_empty HP.
         apply lift_heap_fun in H0.
         pose proof (MSA_positive' (HJ n) (fun_empty H0)).
         simpl.
-        rewrite (proj1 H1).
+        rewrite (proj1 H).
         apply Hsub in HH.
         tauto.
       + apply HJ.
   Qed.
 
-  Theorem hoare_call: ∀ {l Φ Ψ vs},
+  Theorem hoare_call_fun: ∀ {l Φ Ψ vs},
       hoare ⦃ 𝔉 {{{Φ}}} l {{{Ψ}}} * ⟦Φ vs⟧ ⦄
             (ECall l vs)
             (λ n, ⟦Ψ vs n⟧).
@@ -332,7 +332,7 @@ Section hoare_expr.
     pose proof destruct_sepcon_liftΣ HP as (h₁&h₂&HF&HP'&HJ').
     unfold astore_fun in HF.
     destruct HF as (f&Hl&HH&Hemp).
-    pose proof MSA_join_empty HJ' (proj2 (MSA_prod_empty Hemp)) as H1.
+    pose proof MSA_join_empty HJ' (proj2 Hemp) as H1.
     subst h₂.
     pose proof HΔ as HΔ.
     unfold hoare_prog in HΔ.
@@ -367,6 +367,13 @@ Section hoare_expr.
         apply lift_heap_fun.
         tauto.
   Qed.
+
+  Theorem hoare_call_mach: ∀ {l vs Φ Ψ},
+      hoare ⦃ ⇓⟦Φ vs⟧ * (∀ a, 𝔐 {{{ ⌈PC r↦ l⌉ * ⌈prologue a vs⌉ * Φ vs }}}
+                                {{{ ∃ n, ⌈PC r↦ -⌉ * ⌈epilogue a n⌉ * Ψ n vs }}}) ⦄
+            (ECall l vs)
+            (λ n, ⦃ ⇓⟦Ψ n vs⟧ ⦄).
+  Proof. Admitted.
 
   Theorem hoare_store: ∀ {l v},
       hoare ⦃ [l ↦ -] ⦄
@@ -444,6 +451,120 @@ Section hoare_expr.
       easy.
   Qed.
 
+  Theorem hoare_alloc: ∀ {n},
+      n >= 0
+    → hoare ⦃ emp ⦄
+            (EAlloc n)
+            (λ a, ⦃ [ a ↦.. n×- ] ⦄).
+  Proof.
+    intros ? Hpos.
+    unfold hoare.
+    intros ??? HP HJ.
+    split.
+    - simpl; sets_unfold.
+      lia.
+    - intros a ? Hn.
+      simpl in Hn; sets_unfold in Hn.
+      destruct Hn as [_ [Hin Hout]].
+      exists (λ l, if a <=? l then if l <? a + n then CFUndef else h l else h l).
+      split.
+      + unfold lift_assn, astore_uninit_array.
+        simpl.
+        split; [tauto|split].
+        * intros ? HIN.
+          specialize (Hin _ HIN).
+          rewrite (proj2 (Z.leb_le _ _) (proj1 HIN)).
+          rewrite (proj2 (Z.ltb_lt _ _) (proj2 HIN)).
+          unfold frag_writable; tauto.
+        * intros ? HOUT.
+          specialize (Hout _ HOUT).
+          destruct HOUT as [HOUT|HOUT].
+          { assert (¬ a <= l) by lia.
+            apply Z.leb_nle in H.
+            rewrite H.
+            apply HP. }
+          { assert (¬ l < a + n) by lia.
+            apply Z.ltb_nlt in H.
+            rewrite H.
+            destruct (a <=? l); apply HP. }
+      + intros l.
+        destruct (Z.le_decidable a l).
+        * rewrite (proj2 (Z.leb_le _ _) H).
+          destruct (Z.lt_decidable l (a + n)).
+          { rewrite (proj2 (Z.ltb_lt _ _) H0).
+            rewrite (proj1 lift_heap_undef (proj2 (Hin _ (conj H H0)))).
+            specialize (HJ l).
+            rewrite (proj1 lift_heap_emp (proj1 (Hin _ (conj H H0)))) in HJ.
+            pose proof MSA_positive' HJ (emp_empty eq_refl).
+            rewrite (proj2 H1).
+            constructor. }
+          { rewrite (proj2 (Z.ltb_nlt _ _) H0).
+            assert (l < a ∨ l >= a + n) by lia.
+            rewrite<- (proj1 lift_heap_eq (Hout _ H1)).
+            apply HJ. }
+        * rewrite (proj2 (Z.leb_nle _ _) H).
+          assert (l < a ∨ l >= a + n) by lia.
+          rewrite<- (proj1 lift_heap_eq (Hout _ H0)).
+          apply HJ.
+  Qed.
+
+  Theorem hoare_dealloc: ∀ {a n},
+      hoare ⦃ [ a ↦.. n×- ] ⦄
+            (EDealloc a n)
+            (λ _, ⦃ emp ⦄).
+  Proof.
+    intros ??.
+    unfold hoare.
+    intros ??? HP HJ.
+    unfold astore_uninit_array, lift_assn in HP.
+    destruct HP as [Hpos[Hin Hout]].
+    split.
+    - simpl; sets_unfold.
+      intros [H|[l H]].
+      + lia.
+      + specialize (Hin _ (proj1 H)).
+        pose proof join_writable (HJ _) Hin.
+        simpl snd in Hin; rewrite (proj2 H0) in Hin.
+        apply lift_heap_writable in Hin.
+        tauto.
+    - intros m ? Hn.
+      simpl in Hn; sets_unfold in Hn.
+      exists (λ l, if a <=? l then if l <? a + n then CFEmp else h l else h l).
+      split.
+      + unfold aemp.
+        split; [simpl;tauto|].
+        intros l; simpl snd.
+        destruct (Z.le_decidable a l).
+        * rewrite (proj2 (Z.leb_le _ _) H).
+          destruct (Z.lt_decidable l (a + n)).
+          { rewrite (proj2 (Z.ltb_lt _ _) H0).
+            constructor. }
+          { rewrite (proj2 (Z.ltb_nlt _ _) H0).
+            assert (l < a ∨ l >= a + n) by lia.
+            apply (Hout _ H1). }
+        * rewrite (proj2 (Z.leb_nle _ _) H).
+          assert (l < a ∨ l >= a + n) by lia.
+          apply (Hout _ H0).
+      + intros l.
+        destruct (Z.le_decidable a l).
+        * rewrite (proj2 (Z.leb_le _ _) H).
+          destruct (Z.lt_decidable l (a + n)).
+          { rewrite (proj2 (Z.ltb_lt _ _) H0).
+            pose proof (Hin _ (conj H H0)).
+            pose proof (join_writable (HJ _) H1).
+            rewrite (proj1 H2).
+            rewrite (proj1 lift_heap_emp (proj2 (proj1 (proj2 Hn) l (ltac:(lia))))).
+            constructor. }
+          { rewrite (proj2 (Z.ltb_nlt _ _) H0).
+            assert (l < a ∨ l >= a + n) by lia.
+            rewrite<- (proj1 lift_heap_eq (proj2 (proj2 Hn) _ H1)).
+            apply HJ. }
+        * rewrite (proj2 (Z.leb_nle _ _) H).
+          assert (l < a ∨ l >= a + n) by lia.
+          rewrite<- (proj1 lift_heap_eq (proj2 (proj2 Hn) _ H0)).
+          apply HJ.
+  Qed.
+
   Theorem hoare_frame: ∀ {P Q F e},
       hoare P e Q
     → hoare ⦃ P * F ⦄ e (λ n, ⦃ Q n * F ⦄).
@@ -496,43 +617,34 @@ Section hoare_expr.
   Qed.
 
   Definition wp (e: expr Z expr_sem) (Q: Z → assn ΣC): assn ΣC :=
-    λ h, ∀ g σ,
-        join h g (Δ', lift_heap σ)
-      → ¬ σ ∈ er (eval_expr' χ_ok χ_er e)
-      ∧ ∀ n σ',
-          (σ, n, σ') ∈ ok (eval_expr' χ_ok χ_er e)
-        → ∃ h', Q n h' ∧ join h' g (Δ', lift_heap σ').
+    ⦃ ∃ P, P * ⟨hoare P e Q⟩ ⦄.
 
   Lemma wp_hoare: ∀ {P e Q},
       P ⊢ (wp e Q) ↔ hoare P e Q.
   Proof.
+    unfold wp.
     intros ???.
     split; intros H.
     - unfold hoare.
       intros ??? HP HJ.
       apply H in HP.
-      unfold wp in HP.
-      specialize (HP _ _ (conj (conj eq_refl eq_refl) HJ
-                      : join (Δ', h) (Δ', g) (Δ', lift_heap σ))).
-      split; [apply HP|].
-      intros ?? Hn.
-      pose proof (proj2 HP _ _ Hn) as ((?&h')&HQ&HJ').
-      pose proof (proj1 HJ') as [H0 ?].
-      pose proof (proj2 HJ') as H0'.
-      simpl in H0, H0'.
-      subst p.
-      exists h'.
-      easy.
-    - unfold derivable, wp.
-      intros (?&h) HP (?&g) ? HJ.
-      pose proof proj1 HJ as [H0 H1]; simpl in H0, H1; subst p p0.
-      unfold hoare in H.
-      specialize (H _ _ _ HP (proj2 HJ)).
-      split; [apply H|].
-      intros ?? Hn.
-      pose proof (proj2 H _ _ Hn) as [h' [HQ HJ']].
-      exists (Δ', h').
-      easy.
+      unfold aex, asepcon, aprop in HP.
+      destruct HP as (R&σ₁&σ₂&HJ'&HR&H1&Hemp).
+      apply MSA_comm in HJ'.
+      pose proof MSA_join_empty HJ' Hemp.
+      subst σ₁.
+      eapply H1; eauto.
+    - assert (P ⊢ ⦃ P * ⟨hoare P e Q⟩ ⦄).
+      + unfold derivable.
+        intros ? H1.
+        unfold asepcon, aprop.
+        pose proof MSA_unit σ as [u X].
+        pose proof MSA_unit_empty X.
+        apply MSA_comm in X.
+        exists σ, u.
+        tauto.
+      + eapply derivable_trans; [apply H0|].
+        apply (@derivable_exist_r _ _ (λ P, ⦃ P * ⟨ hoare P e Q ⟩ ⦄) P).
   Qed.
 
   Theorem hoare_conseq': ∀ {P P' Q e},
@@ -557,7 +669,7 @@ Section hoare_expr.
     exact derivable_prop_l.
   Qed.
 
-  Theorem hoare_exist: ∀ {A} {P: A → assn ΣC} {e Q} {p: Prop},
+  Theorem hoare_exist: ∀ {A} {P: A → assn ΣC} {e Q},
       hoare ⦃ ∃ x, P x ⦄ e Q
     ↔ ∀ x, hoare (P x) e Q.
   Proof.
@@ -575,120 +687,28 @@ Section hoare_expr.
     exact derivable_disj_l.
   Qed.
 
+  Lemma hoare_frame_l: ∀ {P Q F e},
+      hoare P e Q
+    → hoare ⦃ F * P ⦄ e (λ n, ⦃ F * Q n ⦄).
+  Proof.
+    intros.
+    (* hoare_pre @sepcon_comm. *)
+    (* hoare_post @sepcon_comm. *)
+    (* apply hoare_frame. *)
+    (* assumption. *)
+  Admitted.
+
 End hoare_expr.
+
+Ltac hoare_pre X := (eapply hoare_conseq'; [eapply X|]).
+Ltac hoare_post X := (eapply hoare_conseq; [intros ?; eapply X|]).
+(* Ltac hoare_exec X := *)
+(*   ((((eapply hoare_frame_l) + *)
+(*      (hoare_pre @sepcon_add_unit; eapply hoare_frame_l)); *)
+(*     eapply X) + *)
+(*   ((eapply hoare_conseq; [|(((eapply hoare_frame_l) + (hoare_pre @sepcon_add_unit; eapply hoare_frame_l)); eapply X)]); intros; simpl)). *)
 
 Arguments hoare _ {ctx}.
 
 Definition Hoare Δ P e Q := ∀ ctx, @hoare Δ ctx P e Q.
-
-(* Derived Example. *)
-
-Section hoare_cexpr.
-
-  Variable Δ: prog_spec.
-  Variable ctx: ProofContext Δ.
-
-  Definition choare P ce Q := @hoare Δ ctx P (compile Z expr_sem ce) Q.
-
-  Lemma hoare_frame_emp: ∀ {e P Q},
-      @hoare Δ ctx aemp e Q
-    → @hoare Δ ctx P e (λ v, (asepcon P (Q v))).
-  Proof.
-    intros.
-    eapply hoare_conseq'.
-    eapply derivable_trans.
-    eapply (proj1 emp_sepcon_unit).
-    eapply sepcon_comm.
-    eapply hoare_conseq.
-    intros; apply sepcon_comm.
-    eapply hoare_frame.
-    apply H.
-  Qed.
-
-  Lemma hoare_assume': ∀ {P e},
-      @hoare Δ ctx P (EAssume e) (λ _, (asepcon P (aprop (e ≠ 0)))).
-  Proof.
-    intros.
-    apply hoare_frame_emp.
-    eapply hoare_assume.
-  Qed.
-
-  Lemma hoare_val': ∀ {P n},
-      @hoare Δ ctx P (EVal n) (λ m, (asepcon P (aprop (n = m)))).
-  Proof.
-    intros.
-    apply hoare_frame_emp.
-    eapply hoare_val.
-  Qed.
-
-  Theorem hoare_comp': ∀ {op e₁ e₂ P},
-      @hoare Δ ctx P (EComp op e₁ e₂) (λ n, (asepcon P (aprop ((eval_comp_op op) e₁ e₂ ∧ n = 1 ∨ (¬ (eval_comp_op op) e₁ e₂) ∧ n = 0)))).
-  Proof.
-    intros.
-    apply hoare_frame_emp.
-    eapply hoare_comp.
-  Qed.
-
-  Theorem hoare_skip': ∀ {P},
-      @hoare Δ ctx P ESkip (λ _, P).
-  Proof.
-    intros.
-    eapply hoare_conseq.
-    intros. apply emp_sepcon_unit.
-    apply hoare_frame_emp.
-    apply hoare_skip.
-  Qed.
-
-  Theorem choare_while: ∀ {c e I Q},
-      choare I c Q
-    → (∀ x, x ≠ 0 → choare (Q x) e (λ _, I))
-    → choare I (CEWhile c e) (λ _, Q 0).
-  Proof.
-    intros ???? Hc He.
-    unfold choare.
-    simpl.
-    eapply hoare_fix.
-    intros x Hx.
-    unfold EIf.
-    eapply hoare_bind.
-    apply Hc.
-    intros v.
-    eapply hoare_choice.
-    eapply hoare_bind.
-    eapply hoare_assume'.
-    intros ?.
-    simpl.
-    eapply hoare_bind.
-    apply hoare_prop.
-    apply He.
-    intros.
-    simpl.
-    apply Hx.
-    eapply hoare_bind.
-    eapply hoare_bind.
-    eapply hoare_val'.
-    intros.
-    simpl.
-    apply hoare_prop.
-    intros.
-    subst v0.
-    eapply hoare_comp'.
-    intros.
-    simpl.
-    eapply hoare_bind.
-    eapply hoare_assume'.
-    intros.
-    simpl.
-    apply hoare_prop.
-    intros ?.
-    apply hoare_prop.
-    intros.
-    destruct H0; [|tauto].
-    destruct H0; subst v.
-    apply hoare_skip'.
-  Qed.
-
-End hoare_cexpr.
-
-(* Derived Example End. *)
 

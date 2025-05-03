@@ -300,6 +300,18 @@ Definition eval_load (e: Z): expr_sem :=
   (λ σ n σ', σ e = CZ n ∧ σ = σ',
    λ σ, ¬ ∃ n, σ e = CZ n).
 
+Definition eval_alloc (e: Z): expr_sem :=
+  (λ σ a σ', e >= 0
+           ∧ (∀ l, a <= l < a + e → σ l = CEmp ∧ σ' l = CUndef)
+           ∧ (∀ l, (l < a ∨ l >= a + e) → σ l = σ' l),
+   λ _, e < 0).
+
+Definition eval_dealloc (e₁ e₂: Z): expr_sem :=
+  (λ σ _ σ', e₂ >= 0
+             ∧ (∀ l, e₁ <= l < e₁ + e₂ → writable (σ l) ∧ σ' l = CEmp)
+             ∧ (∀ l, (l < e₁ ∨ l >= e₁ + e₂) → σ l = σ' l),
+   λ σ, e₂ < 0 ∨ ∃ l, e₁ <= l < e₁ + e₂ ∧ ¬  writable (σ l)).
+
 Definition eval_comp_op (op: compare_op): Z → Z → Prop :=
   match op with OEq => eq | OLe => Z.le | OLt => Z.lt end.
 
@@ -328,9 +340,10 @@ Section eval_expr.
     | ECall e es => eval_call χ_ok χ_er e es
     | EStore e₁ e₂ => eval_store e₁ e₂
     | ELoad e => eval_load e
+    | EAlloc e => eval_alloc e
+    | EDealloc e₁ e₂ => eval_dealloc e₁ e₂
     | EArith op e₁ e₂ => eval_arith (eval_arith_op op) e₁ e₂
     | EComp op e₁ e₂ => eval_comp (eval_comp_op op) e₁ e₂
-    | _ => (∅, ∅)
     end.
 
   Definition eval_expr (e: Expr) := eval_expr' (e Z expr_sem).

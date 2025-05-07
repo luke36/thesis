@@ -206,11 +206,15 @@ Section hoare_mach.
         nontrivial_split x σ'
       ∧ Q (Δ', h') ∧ join h' g (lift_LΣ σ').
 
+  (* Inductive hoare_sb A (Φ Ψ: A → assn ΣA): assn ΣA → assn ΣA → Prop := *)
+  (*   HoareSB: ∀ P Q, hoare P ⦃ Q ∨ ∃ a, Φ a * ⟨Ψ a ⟛ Q ∨ hoare_sb A Φ Ψ (Ψ a) Q⟩ ⦄ *)
+  (*                   → hoare_sb A Φ Ψ P Q. *)
+
   Definition hoare_code_final P c Q :=
-    ∀ q, hoare_final ⦃ P * [⌈↦c[q] c⌉] ⦄ ⦃ Q * [⌈↦c[q] c⌉] ⦄.
+    ∀ q, hoare_final ⦃ P * ⌈⌈↦c[q] c⌉⌉ ⦄ ⦃ Q * ⌈⌈↦c[q] c⌉⌉ ⦄.
 
   Definition hoare_code P c Q :=
-    ∀ q, hoare ⦃ P * [⌈↦c[q] c⌉] ⦄ ⦃ Q * [⌈↦c[q] c⌉] ⦄.
+    ∀ q, hoare ⦃ P * ⌈⌈↦c[q] c⌉⌉ ⦄ ⦃ Q * ⌈⌈↦c[q] c⌉⌉ ⦄.
 
   Theorem hoare_seq: ∀ {P Q R},
       hoare P Q → hoare Q R
@@ -297,7 +301,7 @@ Section hoare_mach.
         exists σ, u.
         tauto.
       + eapply derivable_trans; [apply H0|].
-        apply (@derivable_exist_r _ _ (λ P, ⦃ P * ⟨ hoare P Q ⟩ ⦄) P).
+        apply (@derivable_exist_r _ _ _ (λ P, ⦃ P * ⟨ hoare P Q ⟩ ⦄) P).
   Qed.
 
   Theorem hoare_conseq': ∀ {P P' Q},
@@ -371,7 +375,7 @@ Section hoare_mach.
   Qed.
 
   Theorem hoare_self: ∀ {P Q c},
-      (∀ q, hoare_code ⦃ P * [⌈↦c[q] c⌉] ⦄ c ⦃ Q * [⌈↦c[q] c⌉] ⦄)
+      (∀ q, hoare_code ⦃ P * ⌈⌈↦c[q] c⌉⌉ ⦄ c ⦃ Q * ⌈⌈↦c[q] c⌉⌉ ⦄)
     → hoare_code P c Q.
   Proof.
     intros ??? H.
@@ -384,19 +388,19 @@ Section hoare_mach.
     3: { apply H. }
     - deriv_step @sepcon_assoc.
       eapply @sepcon_mono_r.
-      deriv_step @lift_assn_sepcon_congr.
-      deriv_step @lift_assn_mono.
-      apply lift_assn_heap_LΣ_sepcon_congr.
-      eapply lift_assn_mono.
-      eapply lift_assn_heap_LΣ_mono.
+      deriv_step @lift_assn_prod_sepcon_distr.
+      deriv_step @lift_assn_prod_mono.
+      apply lift_assn_prod_sepcon_distr.
+      eapply lift_assn_prod_mono.
+      eapply lift_assn_prod_mono.
       apply (store_code_q_split Hp).
     - deriv_step @sepcon_mono_r.
-      deriv_step @lift_assn_mono.
-      eapply lift_assn_heap_LΣ_mono.
+      deriv_step @lift_assn_prod_mono.
+      eapply lift_assn_prod_mono.
       eapply (store_code_q_split Hp).
-      deriv_step @lift_assn_mono.
-      apply lift_assn_heap_LΣ_sepcon_congr.
-      apply lift_assn_sepcon_congr.
+      deriv_step @lift_assn_prod_mono.
+      apply lift_assn_prod_sepcon_distr.
+      apply lift_assn_prod_sepcon_distr.
       apply sepcon_assoc.
   Qed.
 
@@ -432,117 +436,117 @@ Section hoare_mach.
   Qed.
 
   Theorem hoare_const: ∀ {r n i},
-      hoare_code ⦃ [PC r↦ i] * [r r↦ -] ⦄
+      hoare_code ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ -⌉ ⦄
                        [(i, IConst n r)]
-                       ⦃ [PC r↦ ⦅i + 3⦆] * [r r↦ n] ⦄.
+                       ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r r↦ n⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_nop: ∀ {i},
-      hoare_code ⦃ [PC r↦ i] ⦄
+      hoare_code ⦃ ⌈PC r↦ i⌉ ⦄
                        [(i, INop)]
-                       ⦃ [PC r↦ ⦅i + 1⦆] ⦄.
+                       ⦃ ⌈PC r↦ ⦅i + 1⦆⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_jmp_jump: ∀ {i r x n},
       x > 0
     → hoare_code
-        ⦃ [PC r↦ i] * [r r↦ x] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ x⌉ ⦄
         [(i, IJmp r n)]
-        ⦃ [PC r↦ ⦅i + n⦆] * [r r↦ x] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + n⦆⌉ * ⌈r r↦ x⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_jmp_next: ∀ {i r x n},
       x <= 0
     → hoare_code
-        ⦃ [PC r↦ i] * [r r↦ x] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ x⌉ ⦄
         [(i, IJmp r n)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r r↦ x] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r r↦ x⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_arith_two: ∀ {i op r₁ r₂ n m},
       hoare_code
-        ⦃ [PC r↦ i] * [r₁ r↦ m] * [r₂ r↦ n] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r₁ r↦ m⌉ * ⌈r₂ r↦ n⌉ ⦄
         [(i, IArith op r₁ r₂)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r₁ r↦ m] * [r₂ r↦ eval_arith_op op n m] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r₁ r↦ m⌉ * ⌈r₂ r↦ eval_arith_op op n m⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_arith_one: ∀ {i op r n},
       hoare_code
-        ⦃ [PC r↦ i] * [r r↦ n] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ n⌉ ⦄
         [(i, IArith op r r)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r r↦ eval_arith_op op n n] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r r↦ eval_arith_op op n n⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_load_two: ∀ {i r₁ r₂ a n q},
       hoare_code
-        ⦃ [PC r↦ i] * [r₁ r↦ a] * [r₂ r↦ -] * [⌈a ↦[q] n⌉] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r₁ r↦ a⌉ * ⌈r₂ r↦ -⌉ * ⌈⌈a ↦[q] n⌉⌉ ⦄
         [(i, ILoad r₁ r₂)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r₁ r↦ a] * [r₂ r↦ n] * [⌈a ↦[q] n⌉] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r₁ r↦ a⌉ * ⌈r₂ r↦ n⌉ * ⌈⌈a ↦[q] n⌉⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_load_one: ∀ {i r a n q},
       hoare_code
-        ⦃ [PC r↦ i] * [r r↦ a] * [⌈a ↦[q] n⌉] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ a⌉ * ⌈⌈a ↦[q] n⌉⌉ ⦄
         [(i, ILoad r r)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r r↦ n] * [⌈a ↦[q] n⌉] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r r↦ n⌉ * ⌈⌈a ↦[q] n⌉⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_store_two: ∀ {i r₁ r₂ a n},
       hoare_code
-        ⦃ [PC r↦ i] * [r₁ r↦ n] * [r₂ r↦ a] * [⌈a ↦ -⌉] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r₁ r↦ n⌉ * ⌈r₂ r↦ a⌉ * ⌈⌈a ↦ -⌉⌉ ⦄
         [(i, ILoad r₁ r₂)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r₁ r↦ n] * [r₂ r↦ a] * [⌈a ↦ n⌉] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r₁ r↦ n⌉ * ⌈r₂ r↦ a⌉ * ⌈⌈a ↦ n⌉⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_store_one: ∀ {i r a},
       hoare_code
-        ⦃ [PC r↦ i] * [r r↦ a] * [⌈a ↦ -⌉] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ a⌉ * ⌈⌈a ↦ -⌉⌉ ⦄
         [(i, ILoad r r)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r r↦ a] * [⌈a ↦ a⌉] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r r↦ a⌉ * ⌈⌈a ↦ a⌉⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_load_stack_two: ∀ {i r₁ r₂ a n},
       hoare_code
-        ⦃ [PC r↦ i] * [r₁ r↦ a] * [r₂ r↦ -] * [a s↦ n] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r₁ r↦ a⌉ * ⌈r₂ r↦ -⌉ * ⌈a s↦ n⌉ ⦄
         [(i, ILoad r₁ r₂)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r₁ r↦ a] * [r₂ r↦ n] * [a s↦ n] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r₁ r↦ a⌉ * ⌈r₂ r↦ n⌉ * ⌈a s↦ n⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_load_stack_one: ∀ {i r a n},
       hoare_code
-        ⦃ [PC r↦ i] * [r r↦ a] * [a s↦ n] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ a⌉ * ⌈a s↦ n⌉ ⦄
         [(i, ILoad r r)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r r↦ n] * [a s↦ n] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r r↦ n⌉ * ⌈a s↦ n⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_store_stack_two: ∀ {i r₁ r₂ a n},
       hoare_code
-        ⦃ [PC r↦ i] * [r₁ r↦ n] * [r₂ r↦ a] * [a s↦ -] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r₁ r↦ n⌉ * ⌈r₂ r↦ a⌉ * ⌈a s↦ -⌉ ⦄
         [(i, ILoad r₁ r₂)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r₁ r↦ n] * [r₂ r↦ a] * [a s↦ n] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r₁ r↦ n⌉ * ⌈r₂ r↦ a⌉ * ⌈a s↦ n⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_store_stack_one: ∀ {i r a},
       hoare_code
-        ⦃ [PC r↦ i] * [r r↦ a] * [a s↦ -] ⦄
+        ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ a⌉ * ⌈a s↦ -⌉ ⦄
         [(i, ILoad r r)]
-        ⦃ [PC r↦ ⦅i + 3⦆] * [r r↦ a] * [a s↦ a] ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 3⦆⌉ * ⌈r r↦ a⌉ * ⌈a s↦ a⌉ ⦄.
   Proof. Admitted.
 
   Theorem hoare_call_mach: ∀ {i r p Φ Ψ P},
       hoare_code
-        ⦃ [PC r↦ i] * [r r↦ p] * ([PC r↦ p] * [r r↦ p] -* P * ⟦Φ⟧)
+        ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ p⌉ * (⌈PC r↦ p⌉ * ⌈r r↦ p⌉ -* P * ⟦Φ⟧)
         * 𝔐 {{{Φ}}} {{{Ψ}}} ⦄
         [(i, ICall r)]
-        ⦃ [PC r↦ ⦅i + 2⦆] * P * (∃ p', [PC r↦ p'] -* ⟦Ψ⟧) ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 2⦆⌉ * P * (∃ p', ⌈PC r↦ p'⌉ -* ⟦Ψ⟧) ⦄.
   Proof. Admitted.
 
   Theorem hoare_call_fun: ∀ {i r a Φ Ψ P n l vs},
       hoare_code
-        ⦃ [PC r↦ i] * [r r↦ a] * ([r r↦ a] -* P * [prologue l vs] * ⇑⟦Φ vs⟧)
+        ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ a⌉ * (⌈r r↦ a⌉ -* P * ⌈prologue l vs⌉ * ⇑⟦Φ vs⟧)
         * ⇑(𝔉 {{{Φ}}} a {{{Ψ}}}) ⦄
         [(i, ICall r)]
-        ⦃ [PC r↦ ⦅i + 2⦆] * P * [epilogue l n] * ⇑⟦Ψ vs n⟧ ⦄.
+        ⦃ ⌈PC r↦ ⦅i + 2⦆⌉ * P * ⌈epilogue l n⌉ * ⇑⟦Ψ vs n⟧ ⦄.
     Proof. Admitted.
 
 End hoare_mach.

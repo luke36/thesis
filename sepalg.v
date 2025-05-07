@@ -22,7 +22,9 @@ Class MultiUnitSepAlg (Σ: Type): Type :=
     MSA_positive: ∀ {a b c}, join a b c → join c c c → join a a a;
   }.
 
-#[export] Instance discrete_MSA {A}: MultiUnitSepAlg A.
+Module DiscreteMSA.
+
+#[local] Instance discrete_MSA {A}: MultiUnitSepAlg A.
 Proof.
   refine {| join := λ x y z, x = z ∧ y = z; MSA_fun := _; MSA_cancel := _; MSA_comm := _; MSA_assoc := _; MSA_unit := _ |}.
   - intuition.
@@ -41,6 +43,8 @@ Proof.
     tauto.
   - intuition.
 Defined.
+
+End DiscreteMSA.
 
 #[export] Instance prod_MSA {A} {B} `(MultiUnitSepAlg A, MultiUnitSepAlg B): MultiUnitSepAlg (A * B).
 Proof.
@@ -144,6 +148,15 @@ Proof.
   subst d.
   pose proof MSA_fun H0 H2.
   auto.
+Qed.
+
+Corollary MSA_join_emptys: ∀ {A} `{MultiUnitSepAlg A} {a b c: A},
+    join a b c → MSA_empty a → MSA_empty b → MSA_empty c.
+Proof.
+  intros.
+  pose proof MSA_join_empty H0 H1.
+  subst b.
+  apply H2.
 Qed.
 
 Theorem MSA_positive': ∀ {A} `{MultiUnitSepAlg A} {a b c: A},
@@ -342,28 +355,28 @@ Proof.
   invert H; simpl; auto.
 Qed.
 
-Definition assn Σ := Σ → Prop.
+Definition assn Σ `{MultiUnitSepAlg Σ} := Σ → Prop.
 
-Definition derivable {Σ} (P Q: assn Σ) :=
+Definition derivable {Σ} `{MultiUnitSepAlg Σ} (P Q: assn Σ) :=
   ∀ σ, P σ → Q σ.
 
-Definition equivalent {Σ} (P Q: assn Σ) :=
+Definition equivalent {Σ} `{MultiUnitSepAlg Σ} (P Q: assn Σ) :=
   derivable P Q ∧ derivable Q P.
 
 Notation "P ⊢ Q" := (derivable P Q) (at level 50, no associativity).
 Notation "P ⟛ Q" := (equivalent P Q) (at level 50, no associativity).
 
-Definition atrue {Σ}: assn Σ := λ _, True.
+Definition atrue {Σ} `{MultiUnitSepAlg Σ}: assn Σ := λ _, True.
 
-Definition afalse {Σ}: assn Σ := λ _, False.
+Definition afalse {Σ} `{MultiUnitSepAlg Σ}: assn Σ := λ _, False.
 
-Definition aconj {Σ} (P Q: assn Σ): assn Σ :=
+Definition aconj {Σ} `{MultiUnitSepAlg Σ} (P Q: assn Σ): assn Σ :=
   λ σ, P σ ∧ Q σ.
 
-Definition adisj {Σ} (P Q: assn Σ): assn Σ :=
+Definition adisj {Σ} `{MultiUnitSepAlg Σ} (P Q: assn Σ): assn Σ :=
   λ σ, P σ ∨ Q σ.
 
-Definition aimply {Σ} (P Q: assn Σ): assn Σ :=
+Definition aimply {Σ} `{MultiUnitSepAlg Σ} (P Q: assn Σ): assn Σ :=
   λ σ, P σ → Q σ.
 
 Definition asepcon {Σ} `{MultiUnitSepAlg Σ} (P Q: assn Σ): assn Σ :=
@@ -372,10 +385,10 @@ Definition asepcon {Σ} `{MultiUnitSepAlg Σ} (P Q: assn Σ): assn Σ :=
 Definition awand {Σ} `{MultiUnitSepAlg Σ} (P Q: assn Σ): assn Σ :=
   λ σ, ∀ σ₁ σ₂, P σ₁ → join σ₁ σ σ₂ → Q σ₂.
 
-Definition aex {Σ} {A: Type} (P: A → assn Σ): assn Σ :=
+Definition aex {Σ} `{MultiUnitSepAlg Σ} {A: Type} (P: A → assn Σ): assn Σ :=
   λ σ, ∃ a, P a σ.
 
-Definition aall {Σ} {A: Type} (P: A → assn Σ): assn Σ :=
+Definition aall {Σ} `{MultiUnitSepAlg Σ} {A: Type} (P: A → assn Σ): assn Σ :=
   λ σ, ∀ a, P a σ.
 
 Definition aemp {Σ} `{MultiUnitSepAlg Σ}: assn Σ :=
@@ -404,7 +417,7 @@ Notation "'False'" := (afalse) (in custom assn at level 0).
 Notation "⟨ P ⟩" := (aprop P) (in custom assn, P constr).
 Notation "( P )" := P (in custom assn, P at level 100).
 
-Theorem derivable_trans: ∀ {Σ} {P Q R: assn Σ},
+Theorem derivable_trans: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {P Q R: assn Σ},
     P ⊢ Q → Q ⊢ R → P ⊢ R.
 Proof.
   unfold derivable.
@@ -414,7 +427,7 @@ Proof.
   assumption.
 Qed.
 
-Theorem derivable_refl: ∀ {Σ} {P: assn Σ},
+Theorem derivable_refl: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {P: assn Σ},
     P ⊢ P.
 Proof.
   unfold derivable.
@@ -422,21 +435,21 @@ Proof.
   assumption.
 Qed.
 
-Theorem equivalent_sym: ∀ {Σ} {P Q: assn Σ},
+Theorem equivalent_sym: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ}  {P Q: assn Σ},
     P ⟛ Q → Q ⟛ P.
 Proof.
-  intros ???.
+  intros ????.
   intros [? ?]; unfold equivalent; tauto.
 Qed.
 
-Theorem equivalent_refl: ∀ {Σ} {P: assn Σ},
+Theorem equivalent_refl: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {P: assn Σ},
     P ⟛ P.
 Proof.
   intros.
   unfold equivalent, derivable; auto.
 Qed.
 
-Theorem equivalent_trans: ∀ {Σ} {P Q R: assn Σ},
+Theorem equivalent_trans: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {P Q R: assn Σ},
     P ⟛ Q → Q ⟛ R → P ⟛ R.
 Proof.
   intros.
@@ -538,11 +551,11 @@ Proof.
     exact H1.
 Qed.
 
-Theorem derivable_exist_l: ∀ {Σ} {A} {P: A → assn Σ} {Q},
+Theorem derivable_exist_l: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {A} {P: A → assn Σ} {Q},
     ⦃ ∃ x, P x ⦄ ⊢ Q
   ↔ ∀ x, P x ⊢ Q.
 Proof.
-  intros ????.
+  intros ?????.
   split; intros H.
   - intros x.
     unfold derivable in H |- *.
@@ -559,10 +572,10 @@ Proof.
     eauto.
 Qed.
 
-Theorem derivable_exist_r: ∀ {Σ} {A} {P: A → assn Σ} {x},
+Theorem derivable_exist_r: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {A} {P: A → assn Σ} {x},
     ⦃ P x ⦄ ⊢ ⦃ ∃ x, P x ⦄.
 Proof.
-  intros ????.
+  intros ?????.
   intros ? H.
   unfold aex.
   eauto.
@@ -596,11 +609,11 @@ Proof.
     apply H; tauto.
 Qed.
 
-Theorem derivable_disj_l: ∀ {Σ} {P Q R: assn Σ},
+Theorem derivable_disj_l: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {P Q R: assn Σ},
     ⦃ P ∨ R ⦄ ⊢ Q
   ↔ P ⊢ Q ∧ R ⊢ Q.
 Proof.
-  intros ????.
+  intros ?????.
   split; intros.
   - unfold derivable in H |- *.
     unfold adisj in H.
@@ -635,7 +648,7 @@ Proof.
     apply H0.
 Qed.
 
-Theorem disj_mono: ∀ {Σ} {P Q R: assn Σ},
+Theorem disj_mono: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {P Q R: assn Σ},
     P ⊢ Q
   → ⦃ P ∨ R ⦄ ⊢ ⦃ Q ∨ R ⦄.
 Proof.
@@ -645,7 +658,7 @@ Proof.
   intuition.
 Qed.
 
-Theorem disj_congr: ∀ {Σ} {P Q R: assn Σ},
+Theorem disj_congr: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {P Q R: assn Σ},
     P ⟛ Q
   → ⦃ P ∨ R ⦄ ⟛ ⦃ Q ∨ R ⦄.
 Proof.
@@ -655,7 +668,7 @@ Proof.
     apply H.
 Qed.
 
-Theorem disj_comm: ∀ {Σ} {P Q: assn Σ},
+Theorem disj_comm: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {P Q: assn Σ},
     ⦃ P ∨ Q ⦄ ⟛ ⦃ Q ∨ P ⦄.
 Proof.
   unfold adisj.
@@ -663,7 +676,7 @@ Proof.
   split; intros ? H; intuition.
 Qed.
 
-Theorem disj_assoc: ∀ {Σ} {P Q R: assn Σ},
+Theorem disj_assoc: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {P Q R: assn Σ},
     ⦃ P ∨ Q ∨ R ⦄ ⟛ ⦃ (P ∨ Q) ∨ R ⦄.
 Proof.
   unfold adisj.
@@ -671,7 +684,7 @@ Proof.
   split; intros ? H; intuition.
 Qed.
 
-Theorem false_disj_unit: ∀ {Σ} {P: assn Σ},
+Theorem false_disj_unit: ∀ {Σ} `{MSA: MultiUnitSepAlg Σ} {P: assn Σ},
     ⦃ False ∨ P ⦄ ⟛ ⦃ P ⦄.
 Proof.
   unfold adisj, afalse.
@@ -762,10 +775,10 @@ Qed.
 Require Import Ring Ring_theory.
 Require Import Setoid.
 
-Add Parametric Relation Σ (MSA: MultiUnitSepAlg Σ): (assn Σ) (@equivalent Σ)
-  reflexivity proved by (@equivalent_refl Σ)
-  symmetry proved by (@equivalent_sym Σ)
-  transitivity proved by (@equivalent_trans Σ) as Setoid_assn.
+Add Parametric Relation Σ (MSA: MultiUnitSepAlg Σ): (assn Σ) (@equivalent Σ MSA)
+  reflexivity proved by (@equivalent_refl Σ MSA)
+  symmetry proved by (@equivalent_sym Σ MSA)
+  transitivity proved by (@equivalent_trans Σ MSA) as Setoid_assn.
 
 Add Parametric Morphism Σ (MSA: MultiUnitSepAlg Σ): (@asepcon Σ MSA) with
   signature equivalent ==> equivalent ==> equivalent as sepcon_mor.
@@ -782,7 +795,7 @@ Proof.
     apply H0.
 Qed.
 
-Add Parametric Morphism Σ (MSA: MultiUnitSepAlg Σ): (@adisj Σ) with
+Add Parametric Morphism Σ (MSA: MultiUnitSepAlg Σ): (@adisj Σ MSA) with
   signature equivalent ==> equivalent ==> equivalent as adisj_mor.
 Proof.
   intros.
@@ -818,7 +831,86 @@ Qed.
 
 Ltac deriv_step X := (eapply derivable_trans; [eapply X|]).
 Ltac equiv_step X := (eapply equivalent_trans; [eapply X|]).
-Ltac deriv_step_ring X := (refine (@derivable_trans _ _ X _ _ _);
+Ltac deriv_step_ring X := (refine (@derivable_trans _ _ _ X _ _ _);
                            [ring|]).
-Ltac equiv_step_ring X := (refine (@equivalent_trans _ _ X _ _ _);
+Ltac equiv_step_ring X := (refine (@equivalent_trans _ _ _ X _ _ _);
                            [ring|]).
+
+(* Between different algebras. *)
+
+Definition lift_assn_prod {A Σ} `{MSA0: MultiUnitSepAlg A} `{MSA1: MultiUnitSepAlg Σ}
+  (P: assn Σ): assn (A * Σ) :=
+  λ σ, MSA_empty (fst σ) ∧ P (snd σ).
+
+Notation "⌈ P ⌉" := (lift_assn_prod P) (in custom assn, P at level 100).
+
+Lemma lift_assn_prod_mono: ∀ {A Σ} `{MSA0: MultiUnitSepAlg A} `{MSA1: MultiUnitSepAlg Σ}
+                             {P Q: assn Σ},
+    P ⊢ Q → @derivable (A * Σ) _ ⦃ ⌈P⌉ ⦄ ⦃ ⌈Q⌉ ⦄.
+Proof.
+  intros ??????.
+  intros H.
+  intros ? HP.
+  unfold lift_assn_prod in HP |- *.
+  pose proof (H (snd σ)).
+  tauto.
+Qed.
+
+Lemma lift_assn_prod_sepcon_distr: ∀ {A Σ} `{MSA0: MultiUnitSepAlg A} `{MSA1: MultiUnitSepAlg Σ}
+                                     {P Q: assn Σ},
+    ⦃ ⌈P * Q⌉ ⦄ ⟛ @asepcon _ (prod_MSA MSA0 MSA1) (lift_assn_prod P) (lift_assn_prod Q).
+Proof.
+  intros ??.
+  split; intros ? H.
+  - unfold asepcon, lift_assn_prod in H |- *.
+    destruct H as (Hem1&h1&h2&HJ&HP&HQ).
+    pose proof MSA_unit (fst σ) as [u1 X1].
+    pose proof MSA_unit_empty X1.
+    exists (u1, h1), (u1, h2).
+    intuition.
+    split; [|apply HJ].
+    simpl fst.
+    pose proof MSA_join_empty (MSA_comm X1) Hem1.
+    subst u1; auto.
+  - unfold asepcon, lift_assn_prod in H |- *.
+    destruct H as ((?&h1)&(?&h2)&(?&HJ)&HP&HQ).
+    simpl fst in *; simpl snd in *.
+    pose proof MSA_join_emptys H (proj1 HP) (proj1 HQ).
+    intuition eauto.
+Qed.
+
+Lemma lift_assn_prod_emp_distr: ∀ {A Σ} `{MSA0: MultiUnitSepAlg A} `{MSA1: MultiUnitSepAlg Σ},
+  ⦃ ⌈emp⌉ ⦄ ⟛ @aemp _ (prod_MSA MSA0 MSA1).
+Proof.
+  split; intros ? H.
+  - unfold aemp, lift_assn_prod in H |- *.
+    split; apply H.
+  - unfold aemp, lift_assn_prod in H |- *.
+    intuition; try (apply H).
+Qed.
+
+Lemma lift_assn_prod_prop_distr: ∀ {A Σ} `{MSA0: MultiUnitSepAlg A} `{MSA1: MultiUnitSepAlg Σ} {p},
+  ⦃ ⌈⟨p⟩⌉ ⦄ ⟛ @aprop _ (prod_MSA MSA0 MSA1) p.
+Proof.
+  split; intros ? H.
+  - unfold aprop, lift_assn_prod in H |- *.
+    split; [tauto|].
+    split; apply H.
+  - unfold aprop, lift_assn_prod in H |- *.
+    destruct H.
+    intuition; try (apply H0).
+Qed.
+
+Lemma lift_assn_ΣC_ΣA_exist_distr: ∀ {X A Σ} `{MSA0: MultiUnitSepAlg A} `{MSA1: MultiUnitSepAlg Σ} {P: X → assn Σ},
+  @lift_assn_prod A Σ _ _ ⦃ ∃ x, P x ⦄ ⟛  ⦃ ∃ x, ⌈P x⌉ ⦄.
+Proof.
+  split; intros ? H.
+  - unfold aex, lift_assn_prod in H |- *.
+    destruct H as (?&(?&?)).
+    exists x; tauto.
+  - unfold aex, lift_assn_prod in H |- *.
+    destruct H as (?&?&?).
+    eauto.
+Qed.
+
+(* Between different algebras End. *)

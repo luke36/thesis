@@ -310,7 +310,7 @@ Section hoare_expr.
       subst σ'.
       exists h.
       split.
-      + unfold lift_assn, astore_fun.
+      + unfold astore_fun.
         exists f.
         apply lift_heap_fun in H0.
         pose proof (MSA_positive' (HJ n) (fun_empty H0)).
@@ -376,14 +376,14 @@ Section hoare_expr.
   Proof. Admitted.
 
   Theorem hoare_store: ∀ {l v},
-      hoare ⦃ [l ↦ -] ⦄
+      hoare ⦃ ⌈l ↦ -⌉ ⦄
             (EStore l v)
-            (λ _, ⦃ [l ↦ v] ⦄).
+            (λ _, ⦃ ⌈l ↦ v⌉ ⦄).
   Proof.
     intros ??.
     unfold hoare.
-    intros ??? HP HJ.
-    unfold lift_assn, astore_uninit in HP; simpl in HP.
+    intros ??? [_ HP] HJ.
+    unfold astore_uninit in HP; simpl in HP.
     pose proof join_writable (HJ _) (proj1 HP) as H1.
     split.
     - simpl.
@@ -396,9 +396,9 @@ Section hoare_expr.
       destruct Hn as (Hl'&Hl''&Hemp).
       exists (λ l', if l =? l' then CFZ I1 v else h l').
       split.
-      + unfold lift_assn, astore_int_q.
+      + unfold lift_assn_prod, astore_int_q.
         simpl.
-        split.
+        split; [tauto|split].
         * rewrite Z.eqb_refl.
           reflexivity.
         * intros l' n0.
@@ -418,14 +418,14 @@ Section hoare_expr.
   Qed.
 
   Theorem hoare_load: ∀ {l q v},
-      hoare ⦃ [l ↦[q] v] ⦄
+      hoare ⦃ ⌈l ↦[q] v⌉ ⦄
             (ELoad l)
-            (λ n, ⦃ [l ↦[q] v] * ⟨n = v⟩ ⦄).
+            (λ n, ⦃ ⌈l ↦[q] v⌉ * ⟨n = v⟩ ⦄).
   Proof.
     intros ???.
     unfold hoare.
-    intros ??? HP HJ.
-    unfold lift_assn, astore_int_q in HP.
+    intros ??? [_ HP] HJ.
+    unfold astore_int_q in HP.
     pose proof join_int (HJ _) (proj1 HP) as [??].
     split.
     - simpl.
@@ -444,7 +444,7 @@ Section hoare_expr.
       pose proof MSA_unit_empty X.
       exists (Δ', h), u.
       apply MSA_comm in X.
-      unfold lift_assn, astore_int_q.
+      unfold lift_assn_prod, astore_int_q.
       simpl snd in HP |- *.
       unfold aprop.
       rewrite (proj1 (proj2 lift_heap_int H)) in Hn; injection Hn as Hn.
@@ -455,7 +455,7 @@ Section hoare_expr.
       n >= 0
     → hoare ⦃ emp ⦄
             (EAlloc n)
-            (λ a, ⦃ [ a ↦.. n×- ] ⦄).
+            (λ a, ⦃ ⌈a ↦.. n×-⌉ ⦄).
   Proof.
     intros ? Hpos.
     unfold hoare.
@@ -468,9 +468,9 @@ Section hoare_expr.
       destruct Hn as [_ [Hin Hout]].
       exists (λ l, if a <=? l then if l <? a + n then CFUndef else h l else h l).
       split.
-      + unfold lift_assn, astore_uninit_array.
+      + unfold lift_assn_prod, astore_uninit_array.
         simpl.
-        split; [tauto|split].
+        split; [tauto|split;[tauto|split]].
         * intros ? HIN.
           specialize (Hin _ HIN).
           rewrite (proj2 (Z.leb_le _ _) (proj1 HIN)).
@@ -509,14 +509,14 @@ Section hoare_expr.
   Qed.
 
   Theorem hoare_dealloc: ∀ {a n},
-      hoare ⦃ [ a ↦.. n×- ] ⦄
+      hoare ⦃ ⌈a ↦.. n×-⌉ ⦄
             (EDealloc a n)
             (λ _, ⦃ emp ⦄).
   Proof.
     intros ??.
     unfold hoare.
-    intros ??? HP HJ.
-    unfold astore_uninit_array, lift_assn in HP.
+    intros ??? [_ HP] HJ.
+    unfold astore_uninit_array in HP.
     destruct HP as [Hpos[Hin Hout]].
     split.
     - simpl; sets_unfold.
@@ -644,7 +644,7 @@ Section hoare_expr.
         exists σ, u.
         tauto.
       + eapply derivable_trans; [apply H0|].
-        apply (@derivable_exist_r _ _ (λ P, ⦃ P * ⟨ hoare P e Q ⟩ ⦄) P).
+        apply (@derivable_exist_r _ _ _ (λ P, ⦃ P * ⟨ hoare P e Q ⟩ ⦄) P).
   Qed.
 
   Theorem hoare_conseq': ∀ {P P' Q e},

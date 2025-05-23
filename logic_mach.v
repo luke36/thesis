@@ -541,12 +541,12 @@ Section hoare_mach.
         ⦃ ⌈PC r↦ ⦅i + 2⦆⌉ * P * (∃ p', ⌈PC r↦ p'⌉ -* ⟦Ψ⟧) ⦄.
   Proof. Admitted.
 
-  Theorem hoare_call_fun: ∀ {i r a Φ Ψ P n l vs},
+  Theorem hoare_call_fun: ∀ {i r a Φ Ψ P l vs},
       hoare_code
         ⦃ ⌈PC r↦ i⌉ * ⌈r r↦ a⌉ * (⌈r r↦ a⌉ -* P * ⌈prologue l vs⌉ * ⇑⟦Φ vs⟧)
         * ⇑(𝔉 {{{Φ}}} a {{{Ψ}}}) ⦄
         [(i, ICall r)]
-        ⦃ ⌈PC r↦ ⦅i + 2⦆⌉ * P * ⌈epilogue l n⌉ * ⇑⟦Ψ vs n⟧ ⦄.
+        ⦃ ∃ n, ⌈PC r↦ ⦅i + 2⦆⌉ * P * ⌈epilogue l n⌉ * ⇑⟦Ψ vs n⟧ ⦄.
     Proof. Admitted.
 
 End hoare_mach.

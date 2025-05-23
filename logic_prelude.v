@@ -175,7 +175,7 @@ Definition amach_spec {Σ} `{MultiUnitSepAlg Σ} (H: mach_spec): @assn (lift_Σ 
   λ σ, H ∈ snd (spec σ).
 
 Definition eval_assn {Σ} `{MultiUnitSepAlg Σ}
-  (P: Assn Σ): @assn (lift_Σ Σ) (prod_MSA DiscreteMSA.discrete_MSA _).
+  (P: Assn Σ) (Δ: prog_spec): @assn (lift_Σ Σ) (prod_MSA DiscreteMSA.discrete_MSA _).
 Proof.
   induction P.
   - exact (@lift_assn_prod _ _ DiscreteMSA.discrete_MSA _ P).
@@ -317,7 +317,12 @@ Definition amach_spec_mach {Σ} `{MultiUnitSepAlg Σ} (H: mach_spec): @assn (lif
 
 Notation "'𝔐' {{{ Φ }}} {{{ Ψ }}}" := (amach_spec_mach (MachSpec Φ Ψ)) (in custom assn at level 50, Φ custom Assn, Ψ custom Assn).
 
-Definition caller_any := ⦃ R0 r↦ - * R1 r↦ - * R2 r↦ - ⦄.
+Definition caller_any vs :=
+  match vs with
+  | [] => ⦃ R0 r↦ - * R1 r↦ - * R2 r↦ - ⦄
+  | [v] => ⦃ R0 r↦ v * R1 r↦ - * R2 r↦ - ⦄
+  | v::w::_ => ⦃ R0 r↦ v * R1 r↦ w * R2 r↦ - ⦄
+  end.
 
 Definition caller_r0 n := ⦃ R0 r↦ n * R1 r↦ - * R2 r↦ - ⦄.
 
@@ -327,7 +332,8 @@ Definition stack_up_any a: assn fic_LΣ :=
      ∧ MSA_empty (rg σ) ∧ MSA_empty (hp σ).
 
 Definition prologue l vs :=
-  ⦃ caller_any * SP r↦ l * l s↦.. vs * stack_up_any ⦅l + Z.of_nat (length vs)⦆ ⦄.
+  ⦃ caller_any vs * SP r↦ l * l s↦.. ⦅tl (tl vs)⦆ 
+  * stack_up_any ⦅l + Z.of_nat (length (tl (tl vs)))⦆ ⦄.
 
 Definition epilogue l n :=
   ⦃ caller_r0 n * SP r↦ l * stack_up_any l ⦄.

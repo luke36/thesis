@@ -370,9 +370,9 @@ Section hoare_expr.
 
   Theorem hoare_call_mach: ∀ {l vs Φ Ψ},
       hoare ⦃ ⇓⟦Φ vs⟧ * (∀ a, 𝔐 {{{ ⌈PC r↦ l⌉ * ⌈prologue a vs⌉ * Φ vs }}}
-                                {{{ ∃ n, ⌈PC r↦ -⌉ * ⌈epilogue a n⌉ * Ψ n vs }}}) ⦄
+                                {{{ ∃ n, ⌈PC r↦ -⌉ * ⌈epilogue a n⌉ * Ψ vs n }}}) ⦄
             (ECall l vs)
-            (λ n, ⦃ ⇓⟦Ψ n vs⟧ ⦄).
+            (λ n, ⦃ ⇓⟦Ψ vs n⟧ ⦄).
   Proof. Admitted.
 
   Theorem hoare_store: ∀ {l v},
@@ -686,17 +686,6 @@ Section hoare_expr.
     rewrite<-! wp_hoare.
     exact derivable_disj_l.
   Qed.
-
-  Lemma hoare_frame_l: ∀ {P Q F e},
-      hoare P e Q
-    → hoare ⦃ F * P ⦄ e (λ n, ⦃ F * Q n ⦄).
-  Proof.
-    intros.
-    (* hoare_pre @sepcon_comm. *)
-    (* hoare_post @sepcon_comm. *)
-    (* apply hoare_frame. *)
-    (* assumption. *)
-  Admitted.
 
 End hoare_expr.
 
